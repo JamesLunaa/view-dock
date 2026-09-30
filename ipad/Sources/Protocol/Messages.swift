@@ -95,6 +95,10 @@ struct StatsMessage: Codable {
 struct ByeMessage: Codable {
     let type = MessageType.bye
     let reason: ByeReason
+
+    enum CodingKeys: String, CodingKey {
+        case type, reason
+    }
 }
 
 /// Just enough to read `type` off an incoming control-channel message before

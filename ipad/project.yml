@@ -6,7 +6,7 @@ options:
 
 packages:
   WebRTC:
-    url: https://github.com/stasel/WebRTC-SPM
+    url: https://github.com/stasel/WebRTC.git
     from: 137.0.0
 
 targets:
