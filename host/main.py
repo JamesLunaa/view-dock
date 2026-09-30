@@ -10,6 +10,7 @@ import asyncio
 
 from host.config import HostConfig
 from host.displayserver import X11DisplayServer
+from host.input.injector import InputInjector
 from host.streaming import WebRtcSession
 from host.transport import UsbTransport, WifiTransport
 
@@ -28,14 +29,15 @@ async def run() -> None:
 
     display_server = X11DisplayServer()
     display_server.create_virtual_display(config.display)
+    input_injector = InputInjector(config.display)
 
-    session = WebRtcSession(display_server)
+    session = WebRtcSession(display_server, input_injector, config.display)
     try:
-        await session.start()
-        # TODO: block here until the session ends (e.g. `bye` message or
-        # transport disconnect), instead of returning immediately.
+        await session.start(transport)
+        await session.wait_closed()
     finally:
         await session.close()
+        input_injector.close()
         display_server.destroy_virtual_display()
         await transport.disconnect()
 

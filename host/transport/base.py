@@ -17,3 +17,11 @@ class Transport(ABC):
     @abstractmethod
     async def disconnect(self) -> None:
         """Tear down the underlying connection."""
+
+    @abstractmethod
+    async def send_signal(self, message: dict) -> None:
+        """Send one JSON signaling message (SDP offer/answer) to the iPad."""
+
+    @abstractmethod
+    async def receive_signal(self) -> dict:
+        """Block for the next JSON signaling message from the iPad."""

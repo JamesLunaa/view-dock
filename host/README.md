@@ -34,5 +34,14 @@ events received back from the iPad.
 
 ## Status
 
-Scaffolding only — interfaces and module boundaries are in place; the actual
-capture/encode/stream/input-injection logic is not implemented yet.
+Implemented: X11 virtual display (`xrandr` + `mss`), `uinput` input injection,
+Wi-Fi signaling (WebSocket SDP/ICE exchange) with the USB transport tunneling
+the same signaling over `iproxy`, and the WebRTC session (video track, control
+data channel, `hello`/`display_info`/`input_event`/`bye` handling). Verified
+with a scripted `aiortc` peer standing in for the iPad — full offer/answer
+negotiation, handshake, and input round-trip all pass.
+
+Not yet done: adaptive bitrate from `stats` messages, mDNS discovery for
+Wi-Fi, and Wayland support (phase 2). `create_virtual_display()` requires a
+disconnected output backed by `xf86-video-dummy` — a plain GPU-driven X
+session (or Xwayland) has no spare connector to attach a synthetic mode to.
