@@ -28,8 +28,12 @@ final class WebSocketServer {
     }
 
     /// Starts listening and suspends until the first client has completed
-    /// the WebSocket handshake.
-    func acceptConnection() async throws {
+    /// the WebSocket handshake. `onWaiting` fires (possibly repeatedly,
+    /// without resolving the wait) whenever the listener can't bind yet —
+    /// in practice this is almost always a not-yet-granted Local Network
+    /// permission, which otherwise looks identical to "no host connected
+    /// yet" from the caller's point of view.
+    func acceptConnection(onWaiting: ((NWError) -> Void)? = nil) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             // `newConnectionHandler` and `stateUpdateHandler` are both
             // `@Sendable` closures that could in principle run concurrently,
@@ -50,8 +54,15 @@ final class WebSocketServer {
                 }
             }
             listener.stateUpdateHandler = { state in
-                guard case .failed(let error) = state, resumeOnce.trySet() else { return }
-                continuation.resume(throwing: ServerError.listenerFailed(error))
+                switch state {
+                case .waiting(let error):
+                    onWaiting?(error)
+                case .failed(let error):
+                    guard resumeOnce.trySet() else { return }
+                    continuation.resume(throwing: ServerError.listenerFailed(error))
+                default:
+                    break
+                }
             }
             listener.start(queue: .main)
         }

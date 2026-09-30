@@ -31,20 +31,39 @@ events received back from the iPad.
 ## Requirements
 
 - Arch Linux, X11 session (Wayland support is phase 2).
-- System packages: `xorg-xrandr`, `libimobiledevice` (provides `iproxy` and
-  `usbmuxd`), `ffmpeg`.
+- System packages: `xorg-xrandr`, `ffmpeg`.
+- For USB: `usbmuxd` + `libimobiledevice` (provides `iproxy`/`idevice_id`).
+  **Use the AUR `-git` packages** (`usbmuxd-git`, `libimobiledevice-git`,
+  `libusbmuxd-git`, `libplist-git`, `libimobiledevice-glue-git`) — Arch's
+  official `libimobiledevice` (1.4.0 at time of writing) is too old to
+  complete the lockdownd pairing handshake with iOS 17+/iPadOS 26+ and fails
+  with `lockdown error -8` before the device ever shows a trust prompt. The
+  `-git` packages `provide`/`conflict` the official ones, so `yay -S
+  <packages above>` swaps them in place.
 - Python 3.11+, deps in `requirements.txt`.
 
 ## Status
 
-Implemented: X11 virtual display (`xrandr` + `mss`), `uinput` input injection,
-Wi-Fi signaling (WebSocket SDP/ICE exchange) with the USB transport tunneling
-the same signaling over `iproxy`, and the WebRTC session (video track, control
-data channel, `hello`/`display_info`/`input_event`/`bye` handling). Verified
-with a scripted `aiortc` peer standing in for the iPad — full offer/answer
-negotiation, handshake, and input round-trip all pass.
+Implemented and **verified end-to-end on real hardware** (Wi-Fi and USB,
+both transports, 2026-09-30): X11 virtual display (`xrandr` + `mss`),
+`uinput` input injection, Wi-Fi signaling (WebSocket SDP/ICE exchange) with
+the USB transport tunneling the same signaling over `iproxy`, and the WebRTC
+session (video track, control data channel,
+`hello`/`display_info`/`input_event`/`bye` handling).
+
+Two extra `DisplayServer` implementations exist purely for testing on a
+machine without a working `xf86-video-dummy` Xorg session (this dev machine
+runs Wayland, where Xwayland can neither create xrandr virtual outputs nor
+expose real desktop content to `mss` — captured frames come back all zero):
+`displayserver/passthrough.py` (captures the real primary monitor — same
+Wayland limitation applies) and `displayserver/test_pattern.py` (synthetic
+animated frame, no capture at all — this is what was actually used to
+validate the pipeline). Toggle with `VIEWDOCK_PASSTHROUGH_DISPLAY=1` /
+`VIEWDOCK_TEST_PATTERN_DISPLAY=1` env vars; unset, `main.py` uses the real
+`X11DisplayServer`.
 
 Not yet done: adaptive bitrate from `stats` messages, mDNS discovery for
-Wi-Fi, and Wayland support (phase 2). `create_virtual_display()` requires a
-disconnected output backed by `xf86-video-dummy` — a plain GPU-driven X
-session (or Xwayland) has no spare connector to attach a synthetic mode to.
+Wi-Fi, and Wayland support (phase 2). `create_virtual_display()` in
+`x11.py` itself still hasn't been verified against a real Xorg session with
+`xf86-video-dummy` configured — only exercised against Xwayland, which
+correctly raises "no disconnected output available."

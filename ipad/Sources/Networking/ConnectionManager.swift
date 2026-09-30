@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// Owns the connection lifecycle and drives `WebRTCClient` once signaling
 /// completes. Mirrors `host/main.py`'s transport selection: USB is
@@ -36,7 +37,13 @@ final class ConnectionManager: ObservableObject {
             let signaling = try UsbSignaling()
             usbSignaling = signaling
             statusDescription = "Waiting for USB connection…"
-            try await signaling.waitForHost()
+            try await signaling.waitForHost { [weak self] error in
+                Task { @MainActor in
+                    self?.statusDescription =
+                        "USB listener not ready (\(error.debugDescription)) — check "
+                        + "Settings > Privacy & Security > Local Network for ViewDock"
+                }
+            }
             try await negotiate(using: signaling)
         } catch {
             statusDescription = "USB listener failed: \(error.localizedDescription)"
