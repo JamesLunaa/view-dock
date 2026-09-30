@@ -4,12 +4,26 @@ Picks a transport (USB preferred, Wi-Fi fallback per CLAUDE.md), brings up
 the virtual display, and runs the WebRTC session. Run from the repo root:
 
     python -m host.main
+
+Set VIEWDOCK_PASSTHROUGH_DISPLAY=1 to capture the real primary monitor
+instead of creating a virtual one via xrandr — useful on a machine without a
+`xf86-video-dummy`-configured Xorg session (e.g. plain Wayland/Xwayland, see
+host/displayserver/passthrough.py). Note that on Wayland, passthrough still
+won't see real desktop content (Xwayland doesn't expose it) — for that case,
+set VIEWDOCK_TEST_PATTERN_DISPLAY=1 instead to validate the rest of the
+pipeline against a synthetic animated frame (host/displayserver/test_pattern.py).
 """
 
 import asyncio
+import os
 
 from host.config import HostConfig
-from host.displayserver import X11DisplayServer
+from host.displayserver import (
+    DisplayServer,
+    PassthroughDisplayServer,
+    TestPatternDisplayServer,
+    X11DisplayServer,
+)
 from host.input.injector import InputInjector
 from host.streaming import WebRtcSession
 from host.transport import UsbTransport, WifiTransport
@@ -22,12 +36,20 @@ async def choose_transport(config: HostConfig):
     return WifiTransport()
 
 
+def choose_display_server() -> DisplayServer:
+    if os.environ.get("VIEWDOCK_TEST_PATTERN_DISPLAY"):
+        return TestPatternDisplayServer()
+    if os.environ.get("VIEWDOCK_PASSTHROUGH_DISPLAY"):
+        return PassthroughDisplayServer()
+    return X11DisplayServer()
+
+
 async def run() -> None:
     config = HostConfig.default()
     transport = await choose_transport(config)
     await transport.connect()
 
-    display_server = X11DisplayServer()
+    display_server = choose_display_server()
     display_server.create_virtual_display(config.display)
     input_injector = InputInjector(config.display)
 
