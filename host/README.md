@@ -8,8 +8,12 @@ events received back from the iPad.
 
 - `displayserver/` — abstraction over the Linux display server. `base.py`
   defines the interface; `x11.py` is the phase 1 implementation (`xrandr` for
-  the virtual output, `mss` for capture). A `wayland.py` implementation is
-  planned for phase 2.
+  the virtual output, `mss` for capture). Alongside it, `cursor.py`
+  composites the pointer into captured frames (`mss` returns framebuffer
+  only, so the cursor is otherwise invisible on the iPad) and
+  `geometry_watch.py` re-resolves the capture rectangle when the desktop's
+  display arrangement changes underneath a running session. A `wayland.py`
+  implementation is planned for phase 2.
 - `streaming/` — the `aiortc`-based WebRTC session: video track sourced from
   the display server capture, and the `control` data channel carrying
   `protocol/` messages (handshake, display info, stats).
@@ -23,10 +27,14 @@ events received back from the iPad.
   over either.
 - `input/` — injects `input_event` messages from the iPad into the X11 (or
   later Wayland) session via `uinput`.
-- `xorg/dummy.conf` + `scripts/start-dummy-display.sh` — brings up a real,
-  separate `xf86-video-dummy`-backed X server for the virtual display on a
+- `scripts/force-connector.sh` — forces a real GPU connector "connected" at
+  the kernel/DRM level so the virtual display can attach to it with nothing
+  plugged in. This is the path used on a real Xorg desktop; see "Real GPU
+  output on an Xorg desktop" below.
+- `xorg/dummy.conf` + `scripts/start-dummy-display.sh` — fallback for a
   machine whose main desktop is Wayland (where `xrandr` can't create virtual
-  outputs at all). See "Testing on a Wayland desktop" below.
+  outputs at all): brings up a separate `xf86-video-dummy`-backed X server.
+  See "Fallback: Wayland desktop" below.
 - `config.py` — runtime configuration (virtual display resolution/refresh,
   transport preference).
 - `main.py` — entrypoint: picks a transport, brings up the display server,
@@ -53,55 +61,131 @@ events received back from the iPad.
 
 ## Status
 
-Implemented and **verified end-to-end on real hardware** (Wi-Fi and USB,
-both transports, real X11 desktop content — not a synthetic test pattern —
-2026-10-01): X11 virtual display (`xrandr` + `mss`), `uinput` input
-injection, Wi-Fi signaling (WebSocket SDP/ICE exchange) with the USB
-transport tunneling the same signaling over `iproxy`, and the WebRTC session
-(video track, control data channel,
-`hello`/`display_info`/`input_event`/`bye` handling).
+**Working end-to-end as a real extended display** (verified on hardware
+2026-10-01, Arch + KDE Plasma on Xorg, iPad Air 11" M3 over USB): windows
+drag from the built-in screen onto the iPad and render there live, with the
+mouse cursor visible, at correct UI scale, and the capture follows when the
+display arrangement is rearranged in KDE's settings.
 
-**Known limitation**: touch input from the iPad currently lands on whatever
-session holds real VT/input focus, not necessarily the session being
-streamed — see "Testing on a Wayland desktop" below and TODO/TODO.md. Video
-works regardless.
+Both transports work (Wi-Fi and USB); USB is preferred automatically when a
+device is attached. Also implemented: `uinput` input injection, WebRTC video
+track + `control` data channel with schema-validated
+`hello`/`display_info`/`input_event`/`bye` messages.
+
+**Known gap**: touch input on the iPad is forwarded and injected, but it
+moves the *shared* X pointer rather than acting as a touchscreen bound to
+the virtual display's region, so it isn't usable as direct touch control
+yet. Video is unaffected. See TODO/TODO.md.
 
 Not yet done: adaptive bitrate from `stats` messages, mDNS discovery for
-Wi-Fi, and Wayland support (phase 2).
+Wi-Fi, Pencil pressure/hover, and Wayland support (phase 2).
 
-## Testing on a Wayland desktop
+## Running it
 
-If your main desktop is Wayland (not X11), `xrandr` can't create virtual
-outputs and `mss` can't capture real content at all — Xwayland is a
-compatibility shim, not a real X server (see git history for how this was
-discovered: captured frames came back all zero). Two options:
+On an Xorg desktop with an iPad connected by cable:
 
-1. **Real content, no touch control** (what's actually been verified): run
-   a second, isolated X server on a separate display number via
-   `host/scripts/start-dummy-display.sh`, then point the host at it:
+```sh
+# 1. Once per boot — make a spare GPU connector look plugged in.
+./host/scripts/force-connector.sh HDMI-A-1
+
+# 2. Start the host. USB is auto-preferred when a device is attached.
+#    Size it in the iPad's LOGICAL points, not physical pixels (see below).
+DISPLAY=:0 VIEWDOCK_DISPLAY_WIDTH=1180 VIEWDOCK_DISPLAY_HEIGHT=820 \
+    python -m host.main
+```
+
+Then open the app on the iPad — it listens for USB automatically. Stop the
+host with Ctrl+C so it tears the virtual output down cleanly.
+
+### Sizing: use logical points, not physical pixels
+
+Set the virtual display to the iPad's **logical point** resolution, not its
+pixel resolution. An iPad Air 11" is 2360x1640 pixels but 1180x820 points
+(a 2x retina panel). X11 renders UI at ~96 DPI with no per-output scaling
+available on X11 (KDE's "Global scale" is global, so raising it would
+distort the built-in screen too) — drive it at 2360x1640 and every toolbar
+and glyph comes out at half its intended physical size. At 1180x820 the
+iPad upscales 2x and everything lands correctly.
+
+`cvt` rounds widths to a multiple of 8, so 1180 becomes 1184 — a 0.3%
+aspect difference, not visible.
+
+### Real GPU output on an Xorg desktop
+
+`scripts/force-connector.sh` writes `on` to a DRM connector's debugfs
+`force` file. This matters for a reason that isn't obvious: forcing a mode
+at the **XRandR** level alone does produce a capturable region, but KDE's
+kscreen decides what counts as a real screen from the **kernel DRM**
+connector state, so the desktop refuses to place windows there — you get a
+black rectangle you cannot drag anything onto. Forcing at the DRM level
+makes it a real monitor to the whole stack.
+
+Caveats worth knowing:
+
+- **Not persistent.** debugfs resets on reboot. For a permanent setup, add
+  `video=HDMI-A-1:e` to the kernel command line instead.
+- The DRM connector name (`HDMI-A-1`) differs from the XRandR output name
+  (`HDMI-1`) for the same port.
+- Some drivers accept an XRandR-forced mode but keep reporting the output
+  `disconnected` (confirmed on Intel), so `displayserver/x11.py` keys off
+  "has no active geometry" rather than the connected/disconnected word when
+  picking a spare output.
+- KDE may re-lay-out displays on its own once it notices the new screen.
+  Position both explicitly and atomically if it lands somewhere odd:
+  `kscreen-doctor output.eDP-1.position.0,0 output.HDMI-1.position.1920,0`
+
+### Fallback: Wayland desktop
+
+If your main desktop is Wayland, `xrandr` can't create virtual outputs and
+`mss` can't capture real content at all — Xwayland is a compatibility shim,
+not a real X server, and returns all-zero frames. Options:
+
+1. **Separate X server**: `host/scripts/start-dummy-display.sh` starts an
+   isolated `xf86-video-dummy` X server on `:1`:
    ```sh
    ./host/scripts/start-dummy-display.sh
    DISPLAY=:1 VIEWDOCK_DISPLAY_WIDTH=1024 VIEWDOCK_DISPLAY_HEIGHT=768 \
        python -m host.main
    ```
-   This is a genuinely separate session from your desktop (different VT),
-   so it needs its own content — launch apps with `DISPLAY=:1 <app>`.
-   Non-KDE-dependent apps are safest (KDE apps may hang waiting on session
-   D-Bus services that don't exist on this bare second session — `konsole`
-   did this; not investigated further since it's not the actual goal). The
-   video pipeline works fully; touch input goes to your *real* desktop
-   instead, since that's whichever session holds VT focus — fixing that
-   requires attaching the dummy output to your real desktop's own X11
-   session instead (which requires switching your daily session from
-   Wayland to Xorg — a bigger, deliberately deferred task, see
-   TODO/TODO.md).
-2. **No real content**: `VIEWDOCK_PASSTHROUGH_DISPLAY=1` (captures your real
-   primary monitor — blocked the same way as above on Wayland, kept for a
-   real Xorg session) or `VIEWDOCK_TEST_PATTERN_DISPLAY=1` (synthetic
-   animated frame, no capture at all) env vars — see
-   `displayserver/passthrough.py` / `displayserver/test_pattern.py`.
+   It is genuinely separate from your desktop (different VT), so it has no
+   content of its own — launch apps into it with `DISPLAY=:1 <app>`, and
+   prefer non-KDE apps (KDE ones may hang waiting on session D-Bus services
+   that a bare second session doesn't have; `konsole` did). You cannot drag
+   existing windows there, and input goes to whichever session holds VT
+   focus — i.e. your real desktop. Video works fully.
+2. **No real content**: `VIEWDOCK_PASSTHROUGH_DISPLAY=1` (captures the real
+   primary monitor — blocked the same way on Wayland, kept for real Xorg)
+   or `VIEWDOCK_TEST_PATTERN_DISPLAY=1` (synthetic animated frame, no
+   capture at all). See `displayserver/passthrough.py` /
+   `displayserver/test_pattern.py`.
 
-A quirk hit while testing: disabling and re-enabling a `DUMMY*` output
-reallocates its framebuffer, and the driver doesn't zero it — stale content
-from before the reset can reappear until something repaints. Not a bug in
-this codebase, just how the dummy driver behaves.
+The `xf86-video-dummy` build here hardcodes a 4 MB framebuffer and silently
+ignores its own `VideoRam` option (confirmed via `strings dummy_drv.so`),
+capping usable size at roughly 1024x768 shared across every enabled `DUMMY*`
+output. Also: disabling and re-enabling a `DUMMY*` output reallocates its
+framebuffer without zeroing it, so stale content can reappear until
+something repaints — a driver quirk, not a bug here.
+
+## Troubleshooting
+
+- **Virtual display shows a slice of another monitor.** The capture
+  rectangle moved. This is handled automatically now
+  (`displayserver/geometry_watch.py`); if it persists, restart the host.
+- **`BadName` / `RRCreateMode` on startup.** A mode from a previous run is
+  still registered. Mode names are PID-suffixed to avoid this, but a
+  force-killed run leaves one behind — `xrandr --delmode <output> <mode>`
+  then `xrandr --rmmode <mode>`. `main.py` cleans up on Ctrl+C but has no
+  SIGTERM handler, so `kill`/`pkill` skips teardown.
+- **No cursor on the iPad.** The overlay self-disables and logs a warning if
+  XFixes is unavailable; check host output.
+- **USB: "Could not connect to the iPad's signaling server".** The app must
+  be open and foregrounded, and needs Local Network permission (Settings >
+  Privacy & Security > Local Network). Note that older builds of the app
+  stop listening after a single failed connection attempt and need a
+  relaunch; see TODO/TODO.md.
+
+## Tests
+
+```sh
+python -m pytest host/tests/
+```

@@ -15,6 +15,7 @@ pipeline against a synthetic animated frame (host/displayserver/test_pattern.py)
 """
 
 import asyncio
+import logging
 import os
 
 from host.config import HostConfig
@@ -65,4 +66,12 @@ async def run() -> None:
 
 
 if __name__ == "__main__":
+    # Several components degrade gracefully rather than failing hard (cursor
+    # overlay, screen-layout tracking, schema-invalid control messages) and
+    # say so only via logging — without a handler configured those notices
+    # would be silently dropped. VIEWDOCK_LOG_LEVEL=DEBUG for more.
+    logging.basicConfig(
+        level=os.environ.get("VIEWDOCK_LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+    )
     asyncio.run(run())

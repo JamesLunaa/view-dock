@@ -15,6 +15,10 @@ pytest>=8.0
 mss>=9.0.0
 numpy>=2.0.0
 
+# XFixes pointer capture — mss returns framebuffer only, so the cursor has
+# to be fetched and composited separately (see displayserver/cursor.py)
+python-xlib>=0.33
+
 # Virtual display / xrandr control is done via subprocess calls to the
 # xrandr CLI, no extra dependency needed.
 

@@ -6,8 +6,19 @@ from dataclasses import dataclass
 
 @dataclass
 class DisplayConfig:
-    width: int = 2732
-    height: int = 2048
+    # iPad Air 11" (M3), in LOGICAL POINTS — deliberately not its 2360x1640
+    # physical pixels. It's a 2x retina panel, X11 renders UI at ~96 DPI, and
+    # X11 offers no per-output scaling (KDE's "Global scale" is global, so
+    # raising it would distort the built-in screen too). Driving the virtual
+    # display at physical resolution therefore renders every toolbar and glyph
+    # at half its intended physical size; at point resolution the iPad
+    # upscales 2x and it lands correctly.
+    #
+    # Override via VIEWDOCK_DISPLAY_WIDTH/HEIGHT for a different device, using
+    # that device's point resolution. Note `cvt` rounds width to a multiple of
+    # 8 (1180 -> 1184), a 0.3% aspect difference that isn't visible.
+    width: int = 1180
+    height: int = 820
     refresh_hz: int = 60
 
 
