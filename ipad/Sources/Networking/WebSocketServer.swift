@@ -31,10 +31,13 @@ final class WebSocketServer {
     /// the WebSocket handshake.
     func acceptConnection() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            var resumed = false
+            // `newConnectionHandler` and `stateUpdateHandler` are both
+            // `@Sendable` closures that could in principle run concurrently,
+            // so the "resume at most once" guard needs its own locking
+            // rather than a plain captured var.
+            let resumeOnce = OnceFlag()
             listener.newConnectionHandler = { [weak self] newConnection in
-                guard let self, !resumed else { return }
-                resumed = true
+                guard let self, resumeOnce.trySet() else { return }
                 self.connection = newConnection
                 newConnection.start(queue: .main)
                 Task {
@@ -47,11 +50,8 @@ final class WebSocketServer {
                 }
             }
             listener.stateUpdateHandler = { state in
-                guard !resumed else { return }
-                if case .failed(let error) = state {
-                    resumed = true
-                    continuation.resume(throwing: ServerError.listenerFailed(error))
-                }
+                guard case .failed(let error) = state, resumeOnce.trySet() else { return }
+                continuation.resume(throwing: ServerError.listenerFailed(error))
             }
             listener.start(queue: .main)
         }
@@ -207,5 +207,21 @@ final class WebSocketServer {
             }
         }
         buffer.append(chunk)
+    }
+}
+
+/// Thread-safe "fire exactly once" latch, for guarding a continuation that
+/// could otherwise be resumed from two different `@Sendable` callbacks.
+private final class OnceFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var fired = false
+
+    /// Returns `true` for the first caller only; `false` for every call after.
+    func trySet() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !fired else { return false }
+        fired = true
+        return true
     }
 }
