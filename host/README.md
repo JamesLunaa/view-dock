@@ -14,10 +14,13 @@ events received back from the iPad.
   the display server capture, and the `control` data channel carrying
   `protocol/` messages (handshake, display info, stats).
 - `transport/` — connection establishment for each physical transport.
-  `wifi.py` does LAN discovery/signaling; `usb.py` shells out to
-  `iproxy` (from `libimobiledevice`) to open a usbmuxd TCP tunnel to a
-  connected iPad, after which the same WebRTC session logic in `streaming/`
-  runs over it.
+  `wifi.py` runs a WebSocket signaling *server* that the iPad connects to
+  directly over the LAN. `usb.py` shells out to `iproxy` (from
+  `libimobiledevice`) to open a usbmuxd TCP tunnel and connects through it as
+  a WebSocket *client* — `iproxy` owns the local port and relays to a port
+  the iPad app listens on, so for USB the iPad must be the server, unlike
+  Wi-Fi. Once connected, the same WebRTC session logic in `streaming/` runs
+  over either.
 - `input/` — injects `input_event` messages from the iPad into the X11 (or
   later Wayland) session via `uinput`.
 - `config.py` — runtime configuration (virtual display resolution/refresh,

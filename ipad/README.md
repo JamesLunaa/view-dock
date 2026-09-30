@@ -38,5 +38,19 @@ screen APIs generally don't work in the Simulator for this kind of app).
 
 ## Status
 
-Scaffolding only — types and file boundaries are in place; WebRTC wiring,
-video rendering, and input capture are not implemented yet.
+Implemented: SDP offer/answer negotiation over a bootstrap signaling channel
+(`Networking/SignalingChannel.swift`), full-screen video rendering
+(`Networking/RemoteVideoView.swift`, Metal-backed), and touch input
+forwarding over the `control` data channel. For Wi-Fi the iPad connects out
+to the host's signaling server (`WifiSignaling`, `URLSessionWebSocketTask`);
+for USB the iPad is instead the listener (`UsbSignaling` +
+`WebSocketServer.swift`, a minimal RFC 6455 server), since `iproxy` on the
+host relays through to a port only the device can be listening on — see
+`host/transport/usb.py`.
+
+Not yet done: Wi-Fi discovery (host IP is typed in manually — no mDNS yet),
+Pencil-specific input (pressure/hover; only plain touch is forwarded today),
+and reconnect handling. None of this has been built with Xcode yet — it's
+only been reviewed for correctness on Linux (no Swift toolchain available
+here), so build errors on first `xcodegen generate` + build are likely and
+expected.

@@ -9,13 +9,18 @@ struct TouchInputForwarder {
     var onEvent: (InputEventMessage) -> Void
 
     func handle(kind: InputKind, location: CGPoint, in bounds: CGRect, pressure: Double = 0) {
+        guard bounds.width > 0, bounds.height > 0 else { return }
         let event = InputEventMessage(
             kind: kind,
-            x: location.x / bounds.width,
-            y: location.y / bounds.height,
-            pressure: pressure,
+            x: Self.clampUnit(location.x / bounds.width),
+            y: Self.clampUnit(location.y / bounds.height),
+            pressure: Self.clampUnit(pressure),
             timestampMs: Int64(Date().timeIntervalSince1970 * 1000)
         )
         onEvent(event)
+    }
+
+    private static func clampUnit(_ value: Double) -> Double {
+        min(1, max(0, value))
     }
 }

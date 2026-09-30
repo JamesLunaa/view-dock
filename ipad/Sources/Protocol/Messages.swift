@@ -77,3 +77,32 @@ struct InputEventMessage: Codable {
         case timestampMs = "timestamp_ms"
     }
 }
+
+struct StatsMessage: Codable {
+    let type = MessageType.stats
+    let rttMs: Double
+    let bitrateKbps: Double
+    let fps: Double
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case rttMs = "rtt_ms"
+        case bitrateKbps = "bitrate_kbps"
+        case fps
+    }
+}
+
+struct ByeMessage: Codable {
+    let type = MessageType.bye
+    let reason: ByeReason
+}
+
+/// Just enough to read `type` off an incoming control-channel message before
+/// decoding it into its concrete struct.
+private struct MessageEnvelope: Decodable {
+    let type: MessageType
+}
+
+func decodeMessageType(from data: Data) -> MessageType? {
+    try? JSONDecoder().decode(MessageEnvelope.self, from: data).type
+}
