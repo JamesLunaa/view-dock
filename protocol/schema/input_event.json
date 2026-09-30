@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "input_event",
+  "type": "object",
+  "required": ["type", "kind", "x", "y", "pressure", "timestamp_ms"],
+  "properties": {
+    "type": { "const": "input_event" },
+    "kind": {
+      "enum": [
+        "touch_down", "touch_move", "touch_up",
+        "pencil_down", "pencil_move", "pencil_up"
+      ]
+    },
+    "x": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "y": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "pressure": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "timestamp_ms": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}
