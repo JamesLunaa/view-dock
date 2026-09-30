@@ -6,7 +6,9 @@ or `transport/usb.py` — only signaling/connection setup differs per transport.
 
 import asyncio
 import json
+import logging
 
+import jsonschema
 from aiortc import RTCDataChannel, RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from av import VideoFrame
 
@@ -14,7 +16,9 @@ from host.config import DisplayConfig
 from host.displayserver.base import DisplayServer
 from host.input.injector import InputInjector
 from host.transport.base import Transport
-from protocol import messages
+from protocol import messages, validation
+
+logger = logging.getLogger(__name__)
 
 
 class CaptureVideoTrack(VideoStreamTrack):
@@ -96,37 +100,45 @@ class WebRtcSession:
         await done.wait()
 
     def _on_control_open(self) -> None:
-        assert self._control_channel is not None
-        self._control_channel.send(
-            json.dumps(
-                {
-                    "type": messages.TYPE_HELLO,
-                    "role": messages.ROLE_HOST,
-                    "protocol_version": messages.PROTOCOL_VERSION,
-                }
-            )
+        self._send_control_message(
+            {
+                "type": messages.TYPE_HELLO,
+                "role": messages.ROLE_HOST,
+                "protocol_version": messages.PROTOCOL_VERSION,
+            }
         )
         orientation = (
             messages.ORIENTATION_LANDSCAPE
             if self._display_config.width >= self._display_config.height
             else messages.ORIENTATION_PORTRAIT
         )
-        self._control_channel.send(
-            json.dumps(
-                {
-                    "type": messages.TYPE_DISPLAY_INFO,
-                    "width": self._display_config.width,
-                    "height": self._display_config.height,
-                    "refresh_hz": self._display_config.refresh_hz,
-                    "orientation": orientation,
-                }
-            )
+        self._send_control_message(
+            {
+                "type": messages.TYPE_DISPLAY_INFO,
+                "width": self._display_config.width,
+                "height": self._display_config.height,
+                "refresh_hz": self._display_config.refresh_hz,
+                "orientation": orientation,
+            }
         )
+
+    def _send_control_message(self, message: dict) -> None:
+        assert self._control_channel is not None
+        # A validation failure here means host's own message construction
+        # drifted from protocol/schema/ — a bug on this side, not the iPad's.
+        validation.validate_message(message)
+        self._control_channel.send(json.dumps(message))
 
     def _on_control_message(self, raw: str) -> None:
         message = json.loads(raw)
-        message_type = message.get("type")
 
+        try:
+            validation.validate_message(message)
+        except (validation.UnknownMessageType, jsonschema.ValidationError) as error:
+            logger.warning("Dropping control message that failed schema validation: %s", error)
+            return
+
+        message_type = message["type"]
         if message_type == messages.TYPE_INPUT_EVENT:
             self._input_injector.handle_input_event(message)
         elif message_type == messages.TYPE_STATS:

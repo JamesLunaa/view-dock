@@ -5,6 +5,12 @@ av>=13.0.0
 # Wi-Fi/USB signaling (SDP/ICE exchange over a WebSocket)
 websockets>=13.0
 
+# protocol/schema/*.json validation (see protocol/validation.py)
+jsonschema>=4.0
+
+# Dev/test only
+pytest>=8.0
+
 # Screen capture (X11 phase 1)
 mss>=9.0.0
 numpy>=2.0.0
