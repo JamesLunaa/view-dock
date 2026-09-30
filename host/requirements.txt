@@ -1,0 +1,16 @@
+# Core streaming
+aiortc>=1.9.0
+av>=13.0.0
+
+# Wi-Fi/USB signaling (SDP/ICE exchange over a WebSocket)
+websockets>=13.0
+
+# Screen capture (X11 phase 1)
+mss>=9.0.0
+numpy>=2.0.0
+
+# Virtual display / xrandr control is done via subprocess calls to the
+# xrandr CLI, no extra dependency needed.
+
+# Input injection
+python-uinput>=0.11.2

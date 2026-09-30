@@ -1,0 +1,35 @@
+name: ViewDock
+options:
+  bundleIdPrefix: dev.viewdock
+  deploymentTarget:
+    iOS: "17.0"
+
+packages:
+  WebRTC:
+    url: https://github.com/stasel/WebRTC-SPM
+    from: 137.0.0
+
+targets:
+  ViewDock:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    resources:
+      - path: Resources
+    dependencies:
+      - package: WebRTC
+    info:
+      path: Resources/Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSLocalNetworkUsageDescription: >
+          view-dock discovers and connects to the view-dock host on your
+          local network to use your iPad as a second display.
+        NSBonjourServices:
+          - _viewdock._tcp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.viewdock.ipad
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "2" # iPad only
