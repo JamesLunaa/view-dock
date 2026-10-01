@@ -24,3 +24,8 @@ python-xlib>=0.33
 
 # Input injection
 python-uinput>=0.11.2
+
+# Optional: KDE tray applet (host/gui/), an alternative to the TUI
+# (host/ui/). Not needed to run the host itself or the TUI — only install
+# this if you want `python -m host.gui`. Sizeable (~500MB installed).
+PySide6>=6.5

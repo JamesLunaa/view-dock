@@ -52,6 +52,16 @@ async def choose_transport(config: HostConfig):
     return WifiTransport()
 
 
+async def _wait_until_usb_available(poll_interval: float = 1.0) -> None:
+    """Polls until a USB-attached iPad shows up. Used to let a session that
+    fell back to Wi-Fi (no device plugged in yet when it started) switch to
+    USB the moment a cable appears, instead of only checking once at
+    startup and then ignoring USB for the rest of the session."""
+    usb = UsbTransport()
+    while not await usb.is_available():
+        await asyncio.sleep(poll_interval)
+
+
 def choose_display_server() -> DisplayServer:
     if os.environ.get("VIEWDOCK_TEST_PATTERN_DISPLAY"):
         return TestPatternDisplayServer()
@@ -83,13 +93,15 @@ class HostRunner:
         except Exception:
             logger.warning("Status callback raised; ignoring.", exc_info=True)
 
-    async def run(self) -> None:
-        config = HostConfig(display=self._display_config)
+    async def _establish_transport(self, config: HostConfig):
+        """Picks a transport and waits for it to connect, switching from
+        Wi-Fi to USB mid-wait if a cable shows up (see the comment below).
 
-        cleaned = X11DisplayServer.cleanup_stale_virtual_outputs()
-        if cleaned:
-            self._report(State.STARTING, f"cleared stale output(s): {', '.join(cleaned)}")
-
+        Returns `(transport, transport_name)` once connected, or `None` if a
+        stop was requested first — in which case this has already run the
+        same disconnect/IDLE cleanup `run()`'s own stop path would, so the
+        caller should just return.
+        """
         self._report(State.STARTING, "choosing transport")
         transport = await choose_transport(config)
         transport_name = type(transport).__name__
@@ -102,20 +114,58 @@ class HostRunner:
         # against a stop request too — otherwise request_stop() before a
         # connection exists does nothing, since nothing is awaiting the
         # _stop_requested event yet.
-        self._report(State.WAITING, f"connecting via {transport_name}")
-        connect_task = asyncio.ensure_future(transport.connect())
-        stop_task = asyncio.ensure_future(self._stop_requested.wait())
-        done, pending = await asyncio.wait({connect_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
-        for task in pending:
-            task.cancel()
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
-        if connect_task not in done:
-            self._report(State.STOPPING)
-            await transport.disconnect()
-            self._report(State.IDLE)
+        #
+        # choose_transport() only checks for USB once, at the top of this
+        # method — if no iPad was plugged in yet at that moment, it falls
+        # back to Wi-Fi and never reconsiders USB for the rest of the
+        # session, even if a cable shows up moments later while still
+        # waiting. Found live: plugging in mid-wait just did nothing until
+        # the whole session was restarted. So: while waiting on a Wi-Fi
+        # connect, also poll for USB and switch over if it appears.
+        while True:
+            self._report(State.WAITING, f"connecting via {transport_name}")
+            connect_task = asyncio.ensure_future(transport.connect())
+            stop_task = asyncio.ensure_future(self._stop_requested.wait())
+            waitables = {connect_task, stop_task}
+
+            watch_usb_task = None
+            if config.prefer_usb and isinstance(transport, WifiTransport):
+                watch_usb_task = asyncio.ensure_future(_wait_until_usb_available())
+                waitables.add(watch_usb_task)
+
+            done, pending = await asyncio.wait(waitables, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+
+            if stop_task in done:
+                self._report(State.STOPPING)
+                await transport.disconnect()
+                self._report(State.IDLE)
+                return None
+
+            if watch_usb_task is not None and watch_usb_task in done:
+                self._report(State.STARTING, "USB connected; switching from Wi-Fi")
+                await transport.disconnect()
+                transport = UsbTransport()
+                transport_name = type(transport).__name__
+                continue
+
+            connect_task.result()
+            return transport, transport_name
+
+    async def run(self) -> None:
+        config = HostConfig(display=self._display_config)
+
+        cleaned = X11DisplayServer.cleanup_stale_virtual_outputs()
+        if cleaned:
+            self._report(State.STARTING, f"cleared stale output(s): {', '.join(cleaned)}")
+
+        established = await self._establish_transport(config)
+        if established is None:
             return
-        connect_task.result()
+        transport, transport_name = established
 
         self._report(State.STARTING, "bringing up virtual display")
         display_server = choose_display_server()

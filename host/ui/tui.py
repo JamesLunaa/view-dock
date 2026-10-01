@@ -13,36 +13,20 @@ Run with `python -m host.ui`.
 
 from __future__ import annotations
 
-import asyncio
 import curses
 import logging
 import queue
-import threading
 from collections import deque
-from dataclasses import dataclass
 
-from host.config import IPAD_PRESETS, DisplayConfig, HostConfig
+from host.async_loop_thread import AsyncLoopThread
+from host.config import HostConfig
 from host.displayserver.x11 import X11DisplayServer
+from host.presets import build_presets
 from host.runner import HostRunner, State, StatusEvent
 
 logger = logging.getLogger(__name__)
 
 _LOG_LINES = 200
-
-
-@dataclass(frozen=True)
-class _Preset:
-    label: str
-    display: DisplayConfig | None  # None = "Custom (env vars)": HostConfig.default()
-
-
-def _build_presets() -> list[_Preset]:
-    presets = [
-        _Preset(f"{name} ({w}x{h})", DisplayConfig(width=w, height=h))
-        for name, (w, h) in IPAD_PRESETS.items()
-    ]
-    presets.append(_Preset("Custom (VIEWDOCK_DISPLAY_* env vars)", None))
-    return presets
 
 
 class _TuiLogHandler(logging.Handler):
@@ -62,53 +46,15 @@ class _TuiLogHandler(logging.Handler):
         self._lines.append(self.format(record))
 
 
-class _AsyncLoopThread:
-    """Runs an asyncio event loop on a background thread.
-
-    The HostRunner's lifecycle is a long-lived coroutine (it blocks until the
-    session closes or a stop is requested); curses owns the main thread for
-    input/rendering, so the runner needs a loop of its own.
-    """
-
-    def __init__(self) -> None:
-        self.loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-
-    def start(self) -> None:
-        self._thread.start()
-
-    def _run(self) -> None:
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_forever()
-
-    def submit(self, coro, on_error=None) -> None:
-        future = asyncio.run_coroutine_threadsafe(coro, self.loop)
-        if on_error is not None:
-
-            def _check(f) -> None:
-                exc = f.exception()
-                if exc is not None:
-                    on_error(exc)
-
-            future.add_done_callback(_check)
-
-    def call_soon(self, fn, *args) -> None:
-        self.loop.call_soon_threadsafe(fn, *args)
-
-    def stop(self) -> None:
-        self.loop.call_soon_threadsafe(self.loop.stop)
-        self._thread.join(timeout=2)
-
-
 class HostUi:
     def __init__(self) -> None:
-        self._presets = _build_presets()
+        self._presets = build_presets()
         self._selected = 0
         self._state = State.IDLE
         self._detail = ""
         self._status_queue: queue.Queue[StatusEvent] = queue.Queue()
         self._log_lines: deque[str] = deque(maxlen=_LOG_LINES)
-        self._loop_thread = _AsyncLoopThread()
+        self._loop_thread = AsyncLoopThread()
         self._runner: HostRunner | None = None
         self._quitting = False
 

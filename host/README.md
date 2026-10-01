@@ -41,13 +41,26 @@ events received back from the iPad.
 - `runner.py` — `HostRunner`: the transport → virtual display → WebRTC
   session lifecycle, pulled out of `main.py` so it can report state
   (idle/starting/waiting/connected/stopping) to a caller instead of only a
-  log stream. Both `main.py` and `ui/` drive the same `HostRunner`.
+  log stream. `main.py`, `ui/`, and `gui/` all drive the same `HostRunner`.
+  Also switches from Wi-Fi to USB mid-session if a cable shows up after a
+  session already started on Wi-Fi — `choose_transport()` only checks once.
+- `presets.py` — the device-resolution preset list (built from
+  `config.IPAD_PRESETS`), shared by `ui/` and `gui/` so they never drift.
+- `async_loop_thread.py` — runs `HostRunner`'s asyncio loop on a background
+  thread; shared by `ui/` and `gui/`, which each own the main thread for
+  their own toolkit's event loop (curses, Qt).
 - `main.py` — CLI entrypoint: runs a `HostRunner` to completion, logging its
   state transitions.
 - `ui/` — terminal UI (`python -m host.ui`): start/stop, a device-resolution
   picker, and a live log pane, so a session doesn't mean re-typing
-  `force-connector.sh` + env vars + `python -m host.main` by hand. See
+  `force-connector.sh` + env vars + `python -m host.main` by hand. Works
+  anywhere there's a terminal, including over SSH with no X server. See
   "Running it" below.
+- `gui/` — KDE tray applet (`python -m host.gui`, needs `pip install
+  PySide6`): the same start/stop/presets as a `QSystemTrayIcon` instead of a
+  terminal — a colored dot for state, right-click menu, warnings as tray
+  notifications. Better fit for daily "set it and forget it" use on the
+  desktop itself.
 
 ## Requirements
 
@@ -97,11 +110,14 @@ On an Xorg desktop with an iPad connected by cable:
 # 1. Once per boot — make a spare GPU connector look plugged in.
 ./host/scripts/force-connector.sh HDMI-A-1
 
-# 2a. Terminal UI: pick a device preset, see live connection state, start/stop
-#     with a keypress instead of re-typing env vars every session.
+# 2a. KDE tray applet: resolution picker and start/stop from a tray icon
+#     instead of a terminal (needs `pip install PySide6` first).
+DISPLAY=:0 python -m host.gui
+
+# 2b. Or the terminal UI: same idea, no extra dependency, works over SSH.
 DISPLAY=:0 python -m host.ui
 
-# 2b. Or the raw CLI, same as before. USB is auto-preferred when a device is
+# 2c. Or the raw CLI, same as before. USB is auto-preferred when a device is
 #     attached. Size it in the iPad's LOGICAL points, not physical pixels
 #     (see below).
 DISPLAY=:0 VIEWDOCK_DISPLAY_WIDTH=1180 VIEWDOCK_DISPLAY_HEIGHT=820 \
