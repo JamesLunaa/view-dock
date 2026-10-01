@@ -92,7 +92,34 @@ can't be fully automated (it writes to a kernel debugfs file under `sudo`),
 and needs re-running after every reboot unless you add the suggested kernel
 command-line option for a permanent fix.
 
-### 2. iPad app setup (on a Mac)
+### 2. App icon for the host GUI (optional, recommended)
+
+By default, launching the host means opening a terminal every time. To get a
+normal clickable app icon instead:
+
+```sh
+pip install PySide6          # if you skipped it above
+./host/scripts/install-desktop-entry.sh
+```
+
+This drops a `.desktop` entry into `~/.local/share/applications`, so
+"view-dock Host" shows up in your application menu/launcher like any other
+installed app — clicking it runs `python -m host.gui` with the right working
+directory, no terminal needed.
+
+**One remaining catch:** the virtual display's connector only stays forced
+until reboot (see "Real GPU output on an Xorg desktop" in step 1), so by
+default you still need to run `./host/scripts/force-connector.sh` from a
+terminal once per boot before the icon will work — the GUI will tell you
+to do this (with a suggested connector name) if you click the icon without
+it. To make the icon fully standalone — no terminal, ever — add the kernel
+command-line option mentioned in that same section
+(`video=HDMI-A-1:e`, substituting your connector) so the connector is
+force-connected automatically at every boot. Once that's in place, the app
+icon is the entire host-side workflow: click it, start the session from the
+window that opens, done.
+
+### 3. iPad app setup (on a Mac)
 
 ```sh
 git clone https://github.com/JamesLunaa/view-dock.git
@@ -112,16 +139,15 @@ In Xcode:
    (`⌘R`). The first launch will ask you to trust the developer certificate
    on the iPad (Settings → General → VPN & Device Management).
 
-### 3. First connection
+### 4. First connection
 
 With the host's virtual display set up (step 1) and the app installed on
-your iPad (step 2):
+your iPad (step 3):
 
 1. On the host, launch it one of three ways (see `host/README.md`'s
    "Running it" for the full picture):
-   - **GUI** (recommended for daily use): `./host/scripts/install-desktop-entry.sh`
-     once to add an app-launcher entry, then launch "view-dock Host" from
-     your application menu — or run `python -m host.gui` directly.
+   - **GUI** (recommended for daily use): click the "view-dock Host" app
+     icon from step 2, or run `python -m host.gui` directly.
    - **Terminal UI**: `python -m host.ui` — no extra dependency, works over
      SSH.
    - **Raw CLI**: `python -m host.main` — for scripting/debugging.
