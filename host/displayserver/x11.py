@@ -233,8 +233,19 @@ class X11DisplayServer(DisplayServer):
         # RandR's BadName/RRCreateMode. Leftover modes themselves are swept up
         # by cleanup_stale_virtual_outputs().
         mode_name = f"viewdock_{config.width}x{config.height}_{config.refresh_hz}_{os.getpid()}"
+        # -r: reduced-blanking CVT. Found live: plain `cvt` for 1180x820@60
+        # produces a 79.25MHz-pixel-clock mode that a real Intel iGPU
+        # (Tiger Lake Iris Xe) refused to activate as a third simultaneous
+        # output ("Configure crtc 2 failed") once a real monitor was also
+        # plugged in — even though that same GPU had driven 3-4 real
+        # monitors simultaneously before, so it wasn't a simultaneous-output
+        # *count* limit, just this mode's bandwidth. -r's lower-overhead
+        # blanking intervals bring the same resolution down to 68MHz, which
+        # worked. No downside for a captured-not-displayed-on-real-hardware
+        # virtual mode — reduced blanking exists for exactly this kind of
+        # fixed-timing digital path, not CRTs that need the wider blanking.
         cvt = subprocess.run(
-            ["cvt", str(config.width), str(config.height), str(config.refresh_hz)],
+            ["cvt", "-r", str(config.width), str(config.height), str(config.refresh_hz)],
             check=True,
             capture_output=True,
             text=True,

@@ -277,6 +277,41 @@ WebRTC connection itself is still technically alive.
   (Settings > Privacy & Security > Local Network) if it still doesn't
   connect. Note that older builds of the app stop listening after a single
   failed connection attempt and need a relaunch; see TODO/TODO.md.
+- **A real monitor plugged into the forced connector shows "No signal".**
+  If you're reusing the same physical port for the iPad's virtual display
+  and an actual monitor at different times, a connector left forced "on"
+  from an earlier view-dock session overrides the cable's own hotplug/EDID
+  detection — `xrandr` may still claim it's "connected" with a real-looking
+  mode list (stale cached EDID), but the GPU isn't actually driving output
+  to it. Reset the force state before plugging in a real monitor:
+  ```sh
+  echo unspecified | sudo tee /sys/kernel/debug/dri/*/HDMI-A-1/force
+  ```
+  **Not** `./host/scripts/force-connector.sh HDMI-A-1 off` — `off` is a
+  *different* force state (permanently forced disconnected), not "no
+  force"; it won't fix this either. `unspecified` is what actually restores
+  normal kernel auto-detection.
+- **"Configure crtc N failed" with a real monitor plugged into a different
+  output.** Two possible causes, in order of likelihood:
+  1. The spare output the host picked for the virtual display (check the
+     error: `xrandr --output <name> ...`) has never been force-connected —
+     `force-connector.sh` only forces whichever connector you've told it
+     to, and a different one can end up as the "spare" once a real monitor
+     occupies the one you usually force. Force that one too (same steps as
+     "Real GPU output on an Xorg desktop" above, substituting the new
+     connector name).
+  2. Even force-connected, the mode itself might be too bandwidth-heavy for
+     a third simultaneous output on some iGPUs — confirmed live on an Intel
+     Iris Xe (Tiger Lake): plain `cvt`'s ~79MHz-pixel-clock mode for
+     1180x820@60 failed as a third output even though that same GPU had
+     driven 3-4 *real* monitors simultaneously before (so it wasn't a
+     simultaneous-output-count limit), while a reduced-blanking ~68MHz
+     equivalent worked. `displayserver/x11.py` already uses `cvt -r` for
+     exactly this reason — if you're hitting this on a build older than
+     that fix, update; if it still happens, your spare output's actual
+     available bandwidth with your other active displays may be lower
+     still, worth testing a lower `VIEWDOCK_DISPLAY_WIDTH`/`HEIGHT` or
+     `VIEWDOCK_DISPLAY_REFRESH_HZ`.
 
 ## Tests
 

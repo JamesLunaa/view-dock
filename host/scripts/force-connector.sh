@@ -15,9 +15,17 @@
 # instead (e.g. video=HDMI-A-1:e) — see host/README.md.
 #
 # Usage:
-#   ./host/scripts/force-connector.sh            # defaults to HDMI-A-1
+#   ./host/scripts/force-connector.sh                      # defaults to HDMI-A-1
 #   ./host/scripts/force-connector.sh DP-1
-#   ./host/scripts/force-connector.sh HDMI-A-1 off   # undo
+#   ./host/scripts/force-connector.sh HDMI-A-1 unspecified  # undo: back to normal
+#                                                            # kernel auto-detection
+#
+# Don't use "off" to undo — that's a DIFFERENT force state (permanently
+# FORCED DISCONNECTED), not "no force". Found live: this was still a sharp
+# edge even with this script around — a real monitor plugged into a
+# connector left forced "on" from an earlier view-dock session showed "No
+# signal", because the forced state was overriding the physical cable's own
+# hotplug/EDID detection. "unspecified" is what actually restores it.
 #
 # Note the DRM connector name ("HDMI-A-1") differs from the XRandR output
 # name ("HDMI-1") for the same physical port.
@@ -34,7 +42,8 @@ FORCE_PATH="$(sudo sh -c "ls -d /sys/kernel/debug/dri/*/'${CONNECTOR}'/force 2>/
 
 if [ -z "${FORCE_PATH}" ]; then
     echo "No DRM connector '${CONNECTOR}' found. Available connectors:" >&2
-    sudo find /sys/kernel/debug/dri -maxdepth 2 -name force -printf '%h\n' 2>/dev/null \
+    # maxdepth 3: .../dri/<card>/<connector>/force is 3 levels below dri/.
+    sudo find /sys/kernel/debug/dri -maxdepth 3 -name force -printf '%h\n' 2>/dev/null \
         | sed 's|.*/|  |' >&2 || true
     exit 1
 fi
