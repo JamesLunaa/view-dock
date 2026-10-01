@@ -4,6 +4,9 @@ test_protocol_validation.py's hand-written samples, this exercises the real
 code path via _send_control_message's own validation call.
 """
 
+import asyncio
+
+import aioice.ice
 import numpy as np
 import pytest
 
@@ -54,3 +57,62 @@ def test_on_control_open_sends_valid_hello_and_display_info(width, height, expec
     assert hello["type"] == "hello"
     assert display_info["type"] == "display_info"
     assert display_info["orientation"] == expected_orientation
+
+
+def test_ice_consent_timing_is_patched_to_something_faster_than_aioice_default():
+    """aioice's own defaults (CONSENT_INTERVAL=5, CONSENT_FAILURES=6) add up
+    to ~30s before an unplugged cable surfaces as connectionState "failed" —
+    importing webrtc_session.py patches these module globals to something
+    faster (see its own comment for why there's no cleaner API for this).
+    If an aioice upgrade ever renames/removes these, this fails loudly
+    instead of silently reverting to the slow default."""
+    assert aioice.ice.CONSENT_INTERVAL * aioice.ice.CONSENT_FAILURES < 15
+
+
+class FakePeerConnection:
+    """Stands in for aiortc's RTCPeerConnection, whose connectionState is a
+    read-only property aiortc itself manages — can't be set directly on a
+    real instance, so this is a minimal substitute for the one property
+    _on_connection_state_change reads."""
+
+    def __init__(self, connection_state: str) -> None:
+        self.connectionState = connection_state
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.parametrize("terminal_state", ["failed", "closed"])
+def test_connection_state_change_to_terminal_state_closes_session(terminal_state):
+    """Covers the actual feature: an unplugged cable or killed app never
+    sends `bye`, so without watching connectionState the host would think
+    it's still connected forever. aiortc has no 'disconnected' state —
+    only 'failed' once ICE/DTLS connectivity checks stop getting
+    responses — so that and 'closed' are what this has to catch."""
+
+    async def body():
+        session = WebRtcSession(FakeDisplayServer(), FakeInputInjector(), DisplayConfig())
+        session._pc = FakePeerConnection(connection_state=terminal_state)
+
+        session._on_connection_state_change()
+        await asyncio.sleep(0)  # let the ensure_future'd close() run
+
+        assert session._pc.closed
+        assert session._closed.is_set()
+
+    asyncio.run(body())
+
+
+def test_connection_state_change_to_connected_does_not_close_session():
+    async def body():
+        session = WebRtcSession(FakeDisplayServer(), FakeInputInjector(), DisplayConfig())
+        session._pc = FakePeerConnection(connection_state="connected")
+
+        session._on_connection_state_change()
+        await asyncio.sleep(0)
+
+        assert not session._pc.closed
+        assert not session._closed.is_set()
+
+    asyncio.run(body())

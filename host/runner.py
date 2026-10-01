@@ -62,6 +62,25 @@ async def _wait_until_usb_available(poll_interval: float = 1.0) -> None:
         await asyncio.sleep(poll_interval)
 
 
+async def _wait_until_usb_unavailable(poll_interval: float = 1.0) -> None:
+    """Polls until a USB-attached iPad disappears.
+
+    Found live: WebRTC's ICE can keep a connection's actual video/data
+    flowing over Wi-Fi even after the USB cable is unplugged, if the iPad
+    happens to share a LAN with this host — ICE just uses whatever
+    candidate pair is reachable, independent of which transport carried the
+    signaling, so nothing about unplugging the cable necessarily breaks the
+    negotiated path. That's arguably a nice feature on its own, but someone
+    who explicitly connected over USB may want unplugging it to always mean
+    "disconnected" rather than a silent continue-over-Wi-Fi. Used to force
+    that the moment the device physically disappears, instead of waiting on
+    (or never getting) a WebRTC-level failure.
+    """
+    usb = UsbTransport()
+    while await usb.is_available():
+        await asyncio.sleep(poll_interval)
+
+
 def choose_display_server() -> DisplayServer:
     if os.environ.get("VIEWDOCK_TEST_PATTERN_DISPLAY"):
         return TestPatternDisplayServer()
@@ -152,7 +171,17 @@ class HostRunner:
                 transport_name = type(transport).__name__
                 continue
 
-            connect_task.result()
+            try:
+                connect_task.result()
+            except Exception:
+                # Found live: a transport whose connect() exhausts its own
+                # retries and raises (e.g. UsbTransport's iproxy tunnel never
+                # came up) left its iproxy subprocess running, since nothing
+                # called disconnect() on the way out — the next attempt then
+                # failed immediately with "Address already in use" on top of
+                # the original error.
+                await transport.disconnect()
+                raise
             return transport, transport_name
 
     async def run(self) -> None:
@@ -172,24 +201,61 @@ class HostRunner:
         display_server.create_virtual_display(config.display)
         input_injector = InputInjector(config.display)
 
-        session = WebRtcSession(display_server, input_injector, config.display)
         try:
-            self._report(State.WAITING, transport_name)
-            await session.start(transport)
-            self._report(State.CONNECTED, transport_name)
+            # A dropped connection (unplugged cable, killed app, or any other
+            # disconnect WebRtcSession notices — see its
+            # _on_connection_state_change) loops back to waiting for a new
+            # one instead of tearing the whole session down: the virtual
+            # display and input injector stay up, so reconnecting doesn't
+            # mean restarting the session from the UI. Only an explicit
+            # request_stop() exits this loop.
+            while True:
+                session = WebRtcSession(display_server, input_injector, config.display)
+                try:
+                    self._report(State.WAITING, transport_name)
+                    await session.start(transport)
+                    self._report(State.CONNECTED, transport_name)
 
-            closed = asyncio.ensure_future(session.wait_closed())
-            stopped = asyncio.ensure_future(self._stop_requested.wait())
-            await asyncio.wait({closed, stopped}, return_when=asyncio.FIRST_COMPLETED)
-            for pending in (closed, stopped):
-                if not pending.done():
-                    pending.cancel()
+                    closed = asyncio.ensure_future(session.wait_closed())
+                    stopped = asyncio.ensure_future(self._stop_requested.wait())
+                    waitables = {closed, stopped}
+
+                    usb_gone_task = None
+                    if isinstance(transport, UsbTransport):
+                        usb_gone_task = asyncio.ensure_future(_wait_until_usb_unavailable())
+                        waitables.add(usb_gone_task)
+
+                    done, pending = await asyncio.wait(waitables, return_when=asyncio.FIRST_COMPLETED)
+                    for task in pending:
+                        task.cancel()
+                    if pending:
+                        await asyncio.gather(*pending, return_exceptions=True)
+                    was_stop_requested = stopped in done
+                finally:
+                    # Closing here unconditionally is what makes the USB-gone
+                    # watchdog above actually force a disconnect: wait_closed()
+                    # itself might never have fired (media still flowing over
+                    # Wi-Fi), but session.close() ends it regardless of why
+                    # this block exited.
+                    await session.close()
+
+                await transport.disconnect()
+                if was_stop_requested:
+                    break
+
+                self._report(State.WAITING, "iPad disconnected — waiting to reconnect")
+                established = await self._establish_transport(config)
+                if established is None:
+                    # _establish_transport() already reported STOPPING/IDLE
+                    # and tore down its (new, never-connected) transport;
+                    # the outer finally below still tears down the display
+                    # server/input injector this loop owns.
+                    return
+                transport, transport_name = established
         finally:
             self._report(State.STOPPING)
-            await session.close()
             input_injector.close()
             display_server.destroy_virtual_display()
-            await transport.disconnect()
             self._report(State.IDLE)
 
     def request_stop(self) -> None:

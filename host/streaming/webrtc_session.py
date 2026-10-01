@@ -7,7 +7,9 @@ or `transport/usb.py` — only signaling/connection setup differs per transport.
 import asyncio
 import json
 import logging
+import os
 
+import aioice.ice
 import jsonschema
 from aiortc import RTCDataChannel, RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from av import VideoFrame
@@ -19,6 +21,34 @@ from host.transport.base import Transport
 from protocol import messages, validation
 
 logger = logging.getLogger(__name__)
+
+# aioice's own defaults (5s between ICE consent-freshness checks, 6
+# consecutive failures before giving up — RFC 7675) add up to ~30s before an
+# unplugged cable or killed app surfaces as connectionState "failed" and
+# HostRunner notices the drop. Fine for a protocol implementation, far too
+# slow for a UI that's supposed to flip back to "waiting for iPad" promptly.
+#
+# There's no public per-connection API for this in aiortc/aioice — these are
+# plain module globals that aioice.ice.Connection.query_consent() reads by
+# name at call time, so patching them here (before any RTCPeerConnection
+# exists) takes effect for every connection this process creates. Fragile in
+# the sense that it depends on aioice's internals rather than a stable API,
+# but there's no other way to tune this short of vendoring the check —
+# revisit if an aioice upgrade ever renames/removes these.
+#
+# Actual wall-clock delay is noticeably more than CONSENT_INTERVAL x
+# CONSENT_FAILURES alone: each check also waits up to RETRY_RTO (aioice's
+# own default: 0.5s) per *nominated candidate pair* for a STUN response
+# before counting as a miss, so it's closer to (CONSENT_INTERVAL +
+# ~0.5-1s) x CONSENT_FAILURES — confirmed live (1.5s x 3 measured at
+# 6-10s, not the ~4.5s the naive multiplication suggests).
+aioice.ice.CONSENT_INTERVAL = float(os.environ.get("VIEWDOCK_ICE_CONSENT_INTERVAL", "1.0"))
+aioice.ice.CONSENT_FAILURES = int(os.environ.get("VIEWDOCK_ICE_CONSENT_FAILURES", "2"))
+print(
+    f"[webrtc_session] ICE consent-freshness tuning: "
+    f"interval={aioice.ice.CONSENT_INTERVAL}s, failures={aioice.ice.CONSENT_FAILURES}",
+    flush=True,
+)
 
 
 class CaptureVideoTrack(VideoStreamTrack):
@@ -62,6 +92,7 @@ class WebRtcSession:
         self._control_channel = self._pc.createDataChannel("control")
         self._control_channel.on("open", self._on_control_open)
         self._control_channel.on("message", self._on_control_message)
+        self._pc.on("connectionstatechange", self._on_connection_state_change)
 
         await self._negotiate(transport)
 
@@ -98,6 +129,15 @@ class WebRtcSession:
                 done.set()
 
         await done.wait()
+
+    def _on_connection_state_change(self) -> None:
+        # Catches an unplugged cable, a killed app, or any other disconnect
+        # that never sends a `bye` — aiortc has no "disconnected" state (see
+        # its own comment to that effect), only a `failed` ICE/DTLS state
+        # reached after connectivity checks stop getting responses, so this
+        # fires somewhat later than an unplug than a graceful `bye` would.
+        if self._pc.connectionState in ("failed", "closed"):
+            asyncio.ensure_future(self.close())
 
     def _on_control_open(self) -> None:
         self._send_control_message(

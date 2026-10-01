@@ -66,7 +66,16 @@ class UsbTransport(Transport):
             await self._connection.close()
             self._connection = None
         if self._iproxy_process is not None:
-            self._iproxy_process.terminate()
+            # iproxy exits on its own when the device goes away (unplugged
+            # cable, USB enumeration drop) — terminate()ing a process that's
+            # already gone raises ProcessLookupError, which otherwise took
+            # down the whole reconnect flow right as it was trying to clean
+            # up after a lost connection. wait() on an already-exited
+            # process is safe (returns its exit code immediately).
+            try:
+                self._iproxy_process.terminate()
+            except ProcessLookupError:
+                pass
             await self._iproxy_process.wait()
             self._iproxy_process = None
         if self._iproxy_log_task is not None:
@@ -90,10 +99,23 @@ class UsbTransport(Transport):
         return json.loads(raw)
 
     async def _connect_with_retry(
-        self, attempts: int = 20, delay_seconds: float = 0.25
+        self, fast_attempts: int = 20, fast_delay: float = 0.25, patient_delay: float = 1.0
     ) -> ClientConnection:
-        last_error: Exception | None = None
-        for _ in range(attempts):
+        """Retries indefinitely rather than giving up after `fast_attempts`.
+
+        Found live: a device can be USB-paired (`idevice_id -l` sees it, so
+        `UsbTransport.is_available()` returns True) well before the iPad app
+        is actually open and listening — "connection refused" in that case
+        just means "not ready yet," not a real failure, and the gap can be
+        however long it takes a human to notice and tap the app icon, not
+        the few seconds `iproxy` needs to bind its own socket this was
+        originally tuned for. Giving up and raising after that short budget
+        crashed the whole session. The caller (`HostRunner._establish_transport`)
+        already races this against a stop request, so cancellation —  not an
+        internal attempt cap — is how this is meant to end.
+        """
+        attempt = 0
+        while True:
             try:
                 # ping_interval=None: `websockets` otherwise auto-sends a
                 # ping control frame after 20s of idle connection. The iPad's
@@ -106,10 +128,10 @@ class UsbTransport(Transport):
                 # first send_signal() (e.g. slow ICE gathering, or a human
                 # pausing mid-debug) — ordinary fast sessions never hit it.
                 return await connect(f"ws://127.0.0.1:{self._local_port}", ping_interval=None)
-            except (ConnectionRefusedError, OSError, websockets.exceptions.WebSocketException) as error:
-                last_error = error
-                await asyncio.sleep(delay_seconds)
-        raise RuntimeError(
-            f"Could not connect to the iPad's signaling server through iproxy "
-            f"on 127.0.0.1:{self._local_port}."
-        ) from last_error
+            except (ConnectionRefusedError, OSError, websockets.exceptions.WebSocketException):
+                attempt += 1
+                # Fast retries cover the "iproxy just needs a moment to bind"
+                # case without adding latency to an already-ready connect;
+                # past that, slow down rather than spamming "connection
+                # refused" once a second while patiently waiting for a human.
+                await asyncio.sleep(fast_delay if attempt <= fast_attempts else patient_delay)

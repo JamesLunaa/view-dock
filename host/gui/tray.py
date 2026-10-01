@@ -12,6 +12,7 @@ Run with `python -m host.gui`.
 from __future__ import annotations
 
 import logging
+import os
 import sys
 
 from PySide6.QtCore import QObject, Qt, Signal
@@ -223,7 +224,10 @@ def main() -> None:
         print("No system tray available on this desktop.", file=sys.stderr)
         sys.exit(1)
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=os.environ.get("VIEWDOCK_LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+    )
 
     tray_app = TrayApp()
     tray_app.start_background_loop()

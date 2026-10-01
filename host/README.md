@@ -202,6 +202,34 @@ output. Also: disabling and re-enabling a `DUMMY*` output reallocates its
 framebuffer without zeroing it, so stale content can reappear until
 something repaints — a driver quirk, not a bug here.
 
+## Reconnecting after a drop
+
+Unplugging the cable, killing the app, or any other disconnect that never
+sends a clean `bye` loops the session back to waiting for a new connection
+instead of tearing the whole thing down — the virtual display and input
+injector stay up, so reconnecting (replugging, reopening the app) doesn't
+need the UI restarted. Detection isn't instant: it rides aioice's ICE
+consent-freshness checks (RFC 7675), tuned down from aioice's own defaults
+(~30s) via `VIEWDOCK_ICE_CONSENT_INTERVAL` (default `1.0`, seconds between
+checks) and `VIEWDOCK_ICE_CONSENT_FAILURES` (default `2`, consecutive misses
+before giving up) in `streaming/webrtc_session.py` — in practice a few
+seconds, not the ~2s the naive `interval x failures` multiplication
+suggests, since each check also waits for a STUN response timeout per
+candidate pair (see that file's comment). Lower them further for a snappier
+reaction at the cost of more sensitivity to brief network hiccups falsely
+registering as a drop.
+
+**USB is a special case.** WebRTC's ICE picks whatever candidate pair
+actually works, independent of which transport carried the signaling — if
+the iPad shares a LAN with this host, unplugging the USB cable alone doesn't
+necessarily break anything, since the same video/data can keep flowing over
+Wi-Fi (confirmed live: it kept streaming for minutes after an unplug).
+That's a reasonable feature on its own, but connecting over USB specifically
+usually means you want unplugging it to mean "disconnected." `HostRunner`
+polls the device's physical USB presence while connected via USB and forces
+the session closed the instant it disappears, regardless of whether the
+WebRTC connection itself is still technically alive.
+
 ## Troubleshooting
 
 - **Virtual display shows a slice of another monitor.** The capture
@@ -215,11 +243,14 @@ something repaints — a driver quirk, not a bug here.
   <mode>` then `xrandr --rmmode <mode>` clears it manually.
 - **No cursor on the iPad.** The overlay self-disables and logs a warning if
   XFixes is unavailable; check host output.
-- **USB: "Could not connect to the iPad's signaling server".** The app must
-  be open and foregrounded, and needs Local Network permission (Settings >
-  Privacy & Security > Local Network). Note that older builds of the app
-  stop listening after a single failed connection attempt and need a
-  relaunch; see TODO/TODO.md.
+- **USB stays on "waiting for iPad" after plugging in.** Normal if the app
+  isn't open yet — a device shows up as USB-paired well before anything is
+  listening on the tunneled port, and the host now retries patiently and
+  indefinitely for exactly this gap rather than giving up after a few
+  seconds. Open (or foreground) the app and grant Local Network permission
+  (Settings > Privacy & Security > Local Network) if it still doesn't
+  connect. Note that older builds of the app stop listening after a single
+  failed connection attempt and need a relaunch; see TODO/TODO.md.
 
 ## Tests
 
