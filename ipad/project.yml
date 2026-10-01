@@ -33,3 +33,5 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.viewdock.ipad
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "2" # iPad only
+        DEVELOPMENT_TEAM: #your team id here
+        CODE_SIGN_STYLE: Automatic

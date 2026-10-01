@@ -15,18 +15,23 @@ _UP_KINDS = {messages.INPUT_KIND_TOUCH_UP, messages.INPUT_KIND_PENCIL_UP}
 class InputInjector:
     def __init__(self, display: DisplayConfig) -> None:
         self._display = display
+        # capture_width/capture_height, not width/height: uinput's absolute
+        # range must match the real X11 screen pixel coordinates the shared
+        # pointer moves in, which is the actual XRandR mode geometry
+        # (host/displayserver/x11.py builds the mode at this same size) —
+        # equal to width/height unless VIEWDOCK_DISPLAY_SCALE is set.
         self._device = uinput.Device(
             [
                 uinput.BTN_TOUCH,
-                uinput.ABS_X + (0, display.width, 0, 0),
-                uinput.ABS_Y + (0, display.height, 0, 0),
+                uinput.ABS_X + (0, display.capture_width, 0, 0),
+                uinput.ABS_Y + (0, display.capture_height, 0, 0),
             ],
             name="view-dock-ipad",
         )
 
     def handle_input_event(self, event: dict) -> None:
-        x = round(event["x"] * self._display.width)
-        y = round(event["y"] * self._display.height)
+        x = round(event["x"] * self._display.capture_width)
+        y = round(event["y"] * self._display.capture_height)
         kind = event["kind"]
 
         if kind in _DOWN_KINDS:

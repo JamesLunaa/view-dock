@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// Bootstrap channel used only to exchange the WebRTC SDP offer/answer pair
 /// before the real `RTCPeerConnection` takes over. Mirrors
@@ -74,9 +75,11 @@ final class UsbSignaling: SignalingChannel {
         server = try WebSocketServer(port: port)
     }
 
-    /// Suspends until the host connects through the USB tunnel.
-    func waitForHost() async throws {
-        try await server.acceptConnection()
+    /// Suspends until the host connects through the USB tunnel. `onWaiting`
+    /// reports why the listener isn't bound yet — see
+    /// `WebSocketServer.acceptConnection(onWaiting:)`.
+    func waitForHost(onWaiting: ((NWError) -> Void)? = nil) async throws {
+        try await server.acceptConnection(onWaiting: onWaiting)
     }
 
     func receiveOffer() async throws -> SDPEnvelope {
