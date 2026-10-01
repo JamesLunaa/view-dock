@@ -147,11 +147,7 @@ virtual display mode, the DRM connector step needing a re-run after reboot).
 
 ## Contributing
 
-Contributions, ideas, and feedback are welcome. If you're tackling one of
-the known limitations above or something adjacent, opening an issue first
-to compare notes is a good idea — some of these (touch-as-a-real-touchscreen
-especially) have real design tradeoffs worth discussing before diving into
-an implementation.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
