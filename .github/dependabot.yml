@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # Host Python dependencies: host/requirements.txt (floating ranges) and
+  # host/requirements.lock.txt (exact, hash-pinned — see its header).
+  - package-ecosystem: "pip"
+    directory: "/host"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore"
+
+  # Action versions used by the workflows in .github/workflows/.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore"
+
+# Not covered here: the iPad app's WebRTC dependency. It is declared in
+# ipad/project.yml for XcodeGen, not in a Package.swift, so Dependabot's
+# Swift support can't see it — check it by hand when bumping the iOS side.

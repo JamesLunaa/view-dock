@@ -22,6 +22,37 @@ its own after a dropped connection instead of needing to be restarted.
 - No Apple Pencil pressure/hover — plain touch only.
 - No Wi-Fi discovery yet (the host's IP is typed into the app by hand).
 - Wayland is not supported on the host yet (X11 only).
+- Neither transport authenticates the iPad to the host — see
+  [Security](#security) before running this on a network you don't control.
+
+## Security
+
+view-dock streams your desktop and lets the remote end click on it, so it's
+worth being explicit about what that currently does and doesn't protect.
+[SECURITY.md](SECURITY.md) has the full model and the reporting process;
+the short version:
+
+**Encrypted: yes, always.** Video and the control data channel both ride a
+standard WebRTC session — SRTP for media, DTLS-keyed SCTP for data. That is
+mandatory in WebRTC and there is no plaintext fallback, so nobody passively
+sniffing your network can read your screen off the wire.
+
+**Authenticated: no, not at all.** There is no pairing step, no token, and
+no password. The signaling handshake that sets the session up is plain
+`ws://` with no TLS, and the host accepts the first client that completes
+it. Over Wi-Fi the host listens on `0.0.0.0:8765`, so on a network with a
+hostile device present, that device could connect ahead of your iPad and
+get a live view of the extended display plus the ability to move and click
+the host's pointer. (It could not type: the virtual input device exposes
+pointer motion and a touch button only, and every message is schema
+validated before it's acted on.) Because the DTLS fingerprints are exchanged
+over that same unauthenticated channel, encryption also doesn't stop an
+attacker who can actively rewrite signaling traffic.
+
+In practice: run it on a network you trust, prefer the USB cable, and
+firewall port 8765 if you're somewhere you'd rather not assume that.
+Authentication is a known gap and is tracked in SECURITY.md, not a disputed
+report.
 
 ## Compatibility
 
@@ -85,6 +116,11 @@ pip install -r host/requirements.txt
 sudo modprobe uinput
 echo uinput | sudo tee /etc/modules-load.d/uinput.conf
 ```
+
+(For an exact, hash-verified dependency set instead of the floating version
+ranges — the same one CI installs — use
+`pip install --require-hashes -r host/requirements.lock.txt`. See
+[CONTRIBUTING.md](CONTRIBUTING.md#reproducible-builds).)
 
 Then follow `host/README.md`'s "Real GPU output on an Xorg desktop" section
 once, to set up the virtual display's connector — it's the one step that
@@ -173,7 +209,10 @@ virtual display mode, the DRM connector step needing a re-run after reboot).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, how the test suite is
+structured, the protocol-change checklist, and release/build details.
+Security issues go through [SECURITY.md](SECURITY.md) instead of the public
+issue tracker. Notable changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

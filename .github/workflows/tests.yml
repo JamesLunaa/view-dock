@@ -5,6 +5,9 @@ on:
     branches: [master, dev]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   host-tests:
     runs-on: ubuntu-latest
@@ -16,10 +19,12 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
+        # The lock file is the exact, hash-verified dependency set (see its
+        # header). It deliberately excludes PySide6, which only the optional
+        # host GUI needs and which the test suite never imports.
         run: |
           python -m pip install --upgrade pip
-          grep -v '^PySide6' host/requirements.txt > /tmp/requirements-ci.txt
-          pip install -r /tmp/requirements-ci.txt
+          pip install --require-hashes -r host/requirements.lock.txt
 
       - name: Run host test suite
         run: python -m pytest host/tests -v
