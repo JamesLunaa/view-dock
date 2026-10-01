@@ -1,8 +1,8 @@
 """X11 implementation of DisplayServer.
 
 Virtual output is created via `xrandr` (dummy output / `--addmode`); frames
-are captured via `mss`. This is the phase 1 implementation referenced in
-CLAUDE.md.
+are captured via `mss`. This is the phase 1 implementation (X11 first,
+Wayland later).
 
 Requires a spare output already present in the X server — either a
 genuinely disconnected one backed by `xorg-dummy` (aka `xf86-video-dummy`),
@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 _OUTPUT_STATUS_RE = re.compile(r"^(\S+) (?:dis)?connected\b(.*)$")
 _GEOMETRY_RE = re.compile(r"\d+x\d+\+\d+\+\d+")
 _PRIMARY_RE = re.compile(r"^(\S+) connected primary")
+_STALE_MODE_RE = re.compile(r"^\s+(viewdock_\S+)")
+_DISCONNECTED_RE = re.compile(r"^(\S+) disconnected\b")
 
 
 class X11DisplayServer(DisplayServer):
@@ -47,7 +49,7 @@ class X11DisplayServer(DisplayServer):
         self._layout_watcher: ScreenLayoutWatcher | None = None
 
     def create_virtual_display(self, config: DisplayConfig) -> None:
-        output = self._find_available_output()
+        output = self.find_available_output()
         if output is None:
             raise RuntimeError(
                 "No spare output available for the virtual display. Configure a "
@@ -162,7 +164,20 @@ class X11DisplayServer(DisplayServer):
         self._layout_watcher = None
 
     @staticmethod
-    def _find_available_output() -> str | None:
+    def list_disconnected_outputs() -> list[str]:
+        """Outputs XRandR currently reports as genuinely disconnected.
+
+        For host/ui's "no spare output" message: these are candidates for
+        `scripts/force-connector.sh`. Note that script wants the DRM
+        connector name, which differs from this XRandR output name for the
+        same port (e.g. `HDMI-A-1` vs `HDMI-1`) — see host/README.md's "Real
+        GPU output on an Xorg desktop" section.
+        """
+        result = subprocess.run(["xrandr", "--query"], check=True, capture_output=True, text=True)
+        return [m.group(1) for line in result.stdout.splitlines() if (m := _DISCONNECTED_RE.match(line))]
+
+    @staticmethod
+    def find_available_output() -> str | None:
         result = subprocess.run(["xrandr", "--query"], check=True, capture_output=True, text=True)
         for line in result.stdout.splitlines():
             match = _OUTPUT_STATUS_RE.match(line)
@@ -180,11 +195,43 @@ class X11DisplayServer(DisplayServer):
         return None
 
     @staticmethod
+    def cleanup_stale_virtual_outputs() -> list[str]:
+        """Tear down any `viewdock_*` mode still enabled from a prior run.
+
+        PID-suffixed mode names (see `_build_modeline`) already stop a stale
+        mode from colliding with a new one at `--newmode` time, so this isn't
+        needed to avoid `BadName`/`RRCreateMode` — `main.py` now also handles
+        SIGTERM, so a `kill` (not `kill -9`) tears down cleanly on its own.
+        This instead cleans up the *leftover* mode/output enablement from an
+        older crash or a `kill -9`, which the PID suffix alone doesn't touch.
+        Safe to call unconditionally before `create_virtual_display()` — a
+        clean prior exit leaves nothing to find.
+        """
+        result = subprocess.run(["xrandr", "--query"], check=True, capture_output=True, text=True)
+        current_output: str | None = None
+        cleaned: list[str] = []
+        for line in result.stdout.splitlines():
+            status_match = _OUTPUT_STATUS_RE.match(line)
+            if status_match:
+                current_output = status_match.group(1)
+                continue
+            mode_match = _STALE_MODE_RE.match(line)
+            if mode_match and current_output is not None:
+                mode_name = mode_match.group(1)
+                subprocess.run(["xrandr", "--output", current_output, "--off"], check=False)
+                subprocess.run(["xrandr", "--delmode", current_output, mode_name], check=False)
+                subprocess.run(["xrandr", "--rmmode", mode_name], check=False)
+                cleaned.append(mode_name)
+        if cleaned:
+            logger.info("Cleaned up stale virtual output mode(s): %s", cleaned)
+        return cleaned
+
+    @staticmethod
     def _build_modeline(config: DisplayConfig) -> tuple[str, list[str]]:
         # PID-suffixed so a mode left behind by a crashed/force-killed prior
-        # run (main.py has no SIGTERM handler — see to do list so its
-        # `finally` cleanup doesn't always run) can never collide with this
-        # run's `--newmode` and fail with RandR's BadName/RRCreateMode.
+        # run can never collide with this run's `--newmode` and fail with
+        # RandR's BadName/RRCreateMode. Leftover modes themselves are swept up
+        # by cleanup_stale_virtual_outputs().
         mode_name = f"viewdock_{config.width}x{config.height}_{config.refresh_hz}_{os.getpid()}"
         cvt = subprocess.run(
             ["cvt", str(config.width), str(config.height), str(config.refresh_hz)],

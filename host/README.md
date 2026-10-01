@@ -36,9 +36,18 @@ events received back from the iPad.
   outputs at all): brings up a separate `xf86-video-dummy`-backed X server.
   See "Fallback: Wayland desktop" below.
 - `config.py` — runtime configuration (virtual display resolution/refresh,
-  transport preference).
-- `main.py` — entrypoint: picks a transport, brings up the display server,
-  and runs the WebRTC session.
+  transport preference) and `IPAD_PRESETS`, logical-point resolutions for
+  current iPad models.
+- `runner.py` — `HostRunner`: the transport → virtual display → WebRTC
+  session lifecycle, pulled out of `main.py` so it can report state
+  (idle/starting/waiting/connected/stopping) to a caller instead of only a
+  log stream. Both `main.py` and `ui/` drive the same `HostRunner`.
+- `main.py` — CLI entrypoint: runs a `HostRunner` to completion, logging its
+  state transitions.
+- `ui/` — terminal UI (`python -m host.ui`): start/stop, a device-resolution
+  picker, and a live log pane, so a session doesn't mean re-typing
+  `force-connector.sh` + env vars + `python -m host.main` by hand. See
+  "Running it" below.
 
 ## Requirements
 
@@ -88,14 +97,25 @@ On an Xorg desktop with an iPad connected by cable:
 # 1. Once per boot — make a spare GPU connector look plugged in.
 ./host/scripts/force-connector.sh HDMI-A-1
 
-# 2. Start the host. USB is auto-preferred when a device is attached.
-#    Size it in the iPad's LOGICAL points, not physical pixels (see below).
+# 2a. Terminal UI: pick a device preset, see live connection state, start/stop
+#     with a keypress instead of re-typing env vars every session.
+DISPLAY=:0 python -m host.ui
+
+# 2b. Or the raw CLI, same as before. USB is auto-preferred when a device is
+#     attached. Size it in the iPad's LOGICAL points, not physical pixels
+#     (see below).
 DISPLAY=:0 VIEWDOCK_DISPLAY_WIDTH=1180 VIEWDOCK_DISPLAY_HEIGHT=820 \
     python -m host.main
 ```
 
-Then open the app on the iPad — it listens for USB automatically. Stop the
-host with Ctrl+C so it tears the virtual output down cleanly.
+Then open the app on the iPad — it listens for USB automatically. In the
+TUI, stop with `x` (or `q` to stop-and-quit); on the CLI, Ctrl+C — either way
+the virtual output is torn down cleanly. A plain `kill` (SIGTERM) now also
+tears down cleanly; only `kill -9` skips it.
+
+The force-connector step (1) still has to run before either; the TUI detects
+a missing spare output and tells you which disconnected XRandR outputs are
+candidates rather than failing silently.
 
 ### Sizing: use logical points, not physical pixels
 
@@ -171,11 +191,12 @@ something repaints — a driver quirk, not a bug here.
 - **Virtual display shows a slice of another monitor.** The capture
   rectangle moved. This is handled automatically now
   (`displayserver/geometry_watch.py`); if it persists, restart the host.
-- **`BadName` / `RRCreateMode` on startup.** A mode from a previous run is
-  still registered. Mode names are PID-suffixed to avoid this, but a
-  force-killed run leaves one behind — `xrandr --delmode <output> <mode>`
-  then `xrandr --rmmode <mode>`. `main.py` cleans up on Ctrl+C but has no
-  SIGTERM handler, so `kill`/`pkill` skips teardown.
+- **`BadName` / `RRCreateMode` on startup.** Mode names are PID-suffixed, so
+  this shouldn't happen from a normal prior run anymore — both `HostRunner`
+  (used by `main.py` and `ui/`) sweep up any leftover `viewdock_*` mode
+  before creating a new one. If it still happens, a `kill -9`/crash left
+  something behind that the sweep couldn't see; `xrandr --delmode <output>
+  <mode>` then `xrandr --rmmode <mode>` clears it manually.
 - **No cursor on the iPad.** The overlay self-disables and logs a warning if
   XFixes is unavailable; check host output.
 - **USB: "Could not connect to the iPad's signaling server".** The app must

@@ -1,6 +1,6 @@
 """Entrypoint for the view-dock host server.
 
-Picks a transport (USB preferred, Wi-Fi fallback per CLAUDE.md), brings up
+Picks a transport (USB preferred, Wi-Fi fallback), brings up
 the virtual display, and runs the WebRTC session. Run from the repo root:
 
     python -m host.main
@@ -12,57 +12,45 @@ host/displayserver/passthrough.py). Note that on Wayland, passthrough still
 won't see real desktop content (Xwayland doesn't expose it) — for that case,
 set VIEWDOCK_TEST_PATTERN_DISPLAY=1 instead to validate the rest of the
 pipeline against a synthetic animated frame (host/displayserver/test_pattern.py).
+
+For a terminal UI instead of this raw log stream (status at a glance, a
+device-resolution picker, start/stop without re-typing the command), see
+`python -m host.ui`.
 """
 
 import asyncio
 import logging
 import os
+import signal
 
 from host.config import HostConfig
-from host.displayserver import (
-    DisplayServer,
-    PassthroughDisplayServer,
-    TestPatternDisplayServer,
-    X11DisplayServer,
-)
-from host.input.injector import InputInjector
-from host.streaming import WebRtcSession
-from host.transport import UsbTransport, WifiTransport
+from host.runner import HostRunner, StatusEvent
+
+logger = logging.getLogger(__name__)
 
 
-async def choose_transport(config: HostConfig):
-    usb = UsbTransport()
-    if config.prefer_usb and await usb.is_available():
-        return usb
-    return WifiTransport()
-
-
-def choose_display_server() -> DisplayServer:
-    if os.environ.get("VIEWDOCK_TEST_PATTERN_DISPLAY"):
-        return TestPatternDisplayServer()
-    if os.environ.get("VIEWDOCK_PASSTHROUGH_DISPLAY"):
-        return PassthroughDisplayServer()
-    return X11DisplayServer()
+def _log_status(event: StatusEvent) -> None:
+    logger.info("status: %s%s", event.state.value, f" ({event.detail})" if event.detail else "")
 
 
 async def run() -> None:
     config = HostConfig.default()
-    transport = await choose_transport(config)
-    await transport.connect()
+    runner = HostRunner(config.display, on_status=_log_status)
 
-    display_server = choose_display_server()
-    display_server.create_virtual_display(config.display)
-    input_injector = InputInjector(config.display)
+    # SIGINT is left to asyncio's default (raises KeyboardInterrupt, caught
+    # by asyncio.run() below) so Ctrl+C still cancels immediately even mid
+    # connect. SIGTERM has no such default in asyncio, so a plain `kill` used
+    # to skip the `finally` cleanup entirely, leaving a stale xrandr mode
+    # behind — cancelling the running task here routes it through the same
+    # cleanup path instead.
+    main_task = asyncio.current_task()
+    assert main_task is not None
+    asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, main_task.cancel)
 
-    session = WebRtcSession(display_server, input_injector, config.display)
     try:
-        await session.start(transport)
-        await session.wait_closed()
-    finally:
-        await session.close()
-        input_injector.close()
-        display_server.destroy_virtual_display()
-        await transport.disconnect()
+        await runner.run()
+    except asyncio.CancelledError:
+        pass
 
 
 if __name__ == "__main__":
@@ -74,4 +62,7 @@ if __name__ == "__main__":
         level=os.environ.get("VIEWDOCK_LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
     )
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        pass
