@@ -1,6 +1,6 @@
 # Core streaming
 aiortc>=1.9.0
-av>=13.0.0
+av>=18.1.0
 
 # Wi-Fi/USB signaling (SDP/ICE exchange over a WebSocket)
 websockets>=13.0
