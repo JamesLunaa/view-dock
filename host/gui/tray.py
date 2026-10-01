@@ -173,6 +173,15 @@ class TrayApp:
         self._state = event.state
         self._detail = event.detail
         self._refresh()
+        if event.state is State.IDLE:
+            # Without this, self._runner kept pointing at a finished (but
+            # not crashed) HostRunner after a normal stop — _stop() never
+            # cleared it, only _handle_crash() did. A later _quit() would
+            # then see self._runner is not None, assume a session was still
+            # active, call request_stop() on an object nothing was awaiting
+            # any more (a no-op), and wait forever for a status update that
+            # would never arrive — the GUI never actually quit.
+            self._runner = None
         if self._quitting and event.state is State.IDLE:
             self._finish_quit()
 
