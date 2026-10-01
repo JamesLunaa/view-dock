@@ -1,10 +1,15 @@
-"""KDE tray applet for the host: a StatusNotifierItem instead of a terminal.
+"""KDE tray applet + window for the host.
 
 Reuses the exact same `host/runner.py` `HostRunner` and `host/presets.py`
 preset list the TUI (`host/ui/`) does — this is meant to be a thin shell
 around the same lifecycle, not a reimplementation of it. See TODO/TODO.md's
 "host UI" section for why a TUI shipped first (no GUI toolkit was installed
 to build/verify one) and this is the planned upgrade now that PySide6 is.
+
+`host/gui/window.py` owns the actual controls (resolution, start/stop, log);
+this module owns the one `HostRunner`/background loop thread and the tray
+icon, and is the single place that drives start/stop/preset logic — the
+window only renders state and emits signals for this to act on.
 
 Run with `python -m host.gui`.
 """
@@ -13,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import pathlib
 import sys
 
 from PySide6.QtCore import QObject, Qt, Signal
@@ -22,13 +28,16 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from host.async_loop_thread import AsyncLoopThread
 from host.config import HostConfig
 from host.displayserver.x11 import X11DisplayServer
+from host.gui.window import HostWindow
 from host.presets import Preset, build_presets
 from host.runner import HostRunner, State, StatusEvent
 
 logger = logging.getLogger(__name__)
 
-# One dot color per state, used for both the tray icon and (implicitly) at a
-# glance in the tooltip text — avoids needing a bundled icon asset.
+_ICON_PATH = str(pathlib.Path(__file__).resolve().parent / "assets" / "icon.png")
+
+# One dot color per state, used for both the tray icon and the window's
+# status dot.
 _STATE_COLORS = {
     State.IDLE: QColor("#9e9e9e"),
     State.STARTING: QColor("#f5c518"),
@@ -57,11 +66,22 @@ class _StatusBridge(QObject):
     """Qt auto-connections marshal a cross-thread signal emission onto the
     receiving QObject's own thread automatically — this is what lets
     HostRunner's on_status callback (called from AsyncLoopThread's thread)
-    update tray UI safely without a manually-polled queue like the TUI uses.
+    update tray/window UI safely without a manually-polled queue like the
+    TUI uses.
     """
 
     status_changed = Signal(object)
     crashed = Signal(object)
+    # Logging handlers (_WindowLogHandler, _TrayLogHandler) run on whatever
+    # thread emits the log record — almost always AsyncLoopThread's, not
+    # Qt's GUI thread. Touching a QWidget/QSystemTrayIcon directly from
+    # there is undefined behavior in Qt; it mostly "worked" during testing
+    # until it corrupted QTextEngine's internal state badly enough to abort
+    # the whole process. These two signals, like status_changed/crashed
+    # above, marshal the actual widget-touching onto the GUI thread via a
+    # queued connection instead.
+    log_for_window = Signal(str)
+    log_for_tray = Signal(str, int)  # message, levelno
 
 
 class TrayApp:
@@ -72,18 +92,32 @@ class TrayApp:
         self._detail = ""
         self._runner: HostRunner | None = None
         self._loop_thread = AsyncLoopThread()
+        self._quitting = False
 
         self._bridge = _StatusBridge()
         self._bridge.status_changed.connect(self._handle_status, Qt.ConnectionType.QueuedConnection)
         self._bridge.crashed.connect(self._handle_crash, Qt.ConnectionType.QueuedConnection)
 
+        self._window = HostWindow(self._presets, icon_path=_ICON_PATH)
+        self._window.start_requested.connect(self._start)
+        self._window.stop_requested.connect(self._stop)
+        self._window.preset_selected.connect(self._select_preset)
+        self._window.quit_requested.connect(self._quit)
+        self._window.show()
+
         self._tray = QSystemTrayIcon(_dot_icon(_STATE_COLORS[State.IDLE]))
         self._tray.setToolTip("view-dock: idle")
+        self._tray.activated.connect(self._on_tray_activated)
 
         self._menu = QMenu()
         self._status_action = QAction("idle")
         self._status_action.setEnabled(False)
         self._menu.addAction(self._status_action)
+        self._menu.addSeparator()
+
+        show_window_action = QAction("Show window")
+        show_window_action.triggered.connect(self._show_window)
+        self._menu.addAction(show_window_action)
         self._menu.addSeparator()
 
         self._resolution_menu = QMenu("Resolution")
@@ -116,7 +150,10 @@ class TrayApp:
         self._tray.setContextMenu(self._menu)
         self._tray.show()
 
-        logging.getLogger().addHandler(_TrayLogHandler(self._tray))
+        self._bridge.log_for_window.connect(self._window.append_log, Qt.ConnectionType.QueuedConnection)
+        self._bridge.log_for_tray.connect(self._show_log_notification, Qt.ConnectionType.QueuedConnection)
+        logging.getLogger().addHandler(_TrayLogHandler(self._bridge))
+        logging.getLogger().addHandler(_WindowLogHandler(self._bridge))
         logging.getLogger().setLevel(logging.INFO)
 
     # -- lifecycle -----------------------------------------------------
@@ -136,6 +173,8 @@ class TrayApp:
         self._state = event.state
         self._detail = event.detail
         self._refresh()
+        if self._quitting and event.state is State.IDLE:
+            self._finish_quit()
 
     def _handle_crash(self, exc: BaseException) -> None:
         self._runner = None
@@ -143,17 +182,40 @@ class TrayApp:
         self._detail = str(exc)
         self._refresh()
         self._tray.showMessage("view-dock host crashed", str(exc), QSystemTrayIcon.MessageIcon.Critical)
+        # A crash mid-quit (e.g. during cleanup) would otherwise never reach
+        # the IDLE check in _handle_status(), leaving _finish_quit() stuck
+        # waiting for a state transition that's never coming.
+        if self._quitting:
+            self._finish_quit()
 
     def _refresh(self) -> None:
         label = self._state.value + (f": {self._detail}" if self._detail else "")
         self._tray.setToolTip(f"view-dock: {label}")
         self._tray.setIcon(_dot_icon(_STATE_COLORS[self._state]))
         self._status_action.setText(label)
+        self._window.apply_status(self._state, self._detail, _STATE_COLORS[self._state])
 
         editable = self._state in (State.IDLE, State.ERROR)
         self._resolution_menu.setEnabled(editable)
         self._start_action.setEnabled(editable)
         self._stop_action.setEnabled(not editable)
+
+    # -- window/tray glue --------------------------------------------------
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self._toggle_window()
+
+    def _toggle_window(self) -> None:
+        if self._window.isVisible():
+            self._window.hide()
+        else:
+            self._show_window()
+
+    def _show_window(self) -> None:
+        self._window.show()
+        self._window.raise_()
+        self._window.activateWindow()
 
     # -- actions ---------------------------------------------------------
 
@@ -188,37 +250,80 @@ class TrayApp:
         self._loop_thread.call_soon(self._runner.request_stop)
 
     def _quit(self) -> None:
-        if self._runner is not None:
-            self._loop_thread.call_soon(self._runner.request_stop)
+        if self._quitting:
+            return
+        self._quitting = True
+        if self._runner is None:
+            self._finish_quit()
+            return
+        # Stopping the loop thread immediately after requesting the runner
+        # stop (the original approach) raced its cleanup: request_stop()
+        # only sets an asyncio.Event — the runner's actual teardown
+        # (destroying the virtual display, disconnecting the transport, e.g.
+        # terminating iproxy) runs afterward as a consequence, and needs the
+        # loop to keep running for that to happen. Stopping the loop in the
+        # same breath could cut it off mid-cleanup, the same way a `kill
+        # -TERM` on the whole process did earlier. Waiting for the IDLE
+        # status (see _handle_status/_handle_crash) instead means the loop
+        # only actually stops once cleanup has genuinely finished.
+        self._loop_thread.call_soon(self._runner.request_stop)
+
+    def _finish_quit(self) -> None:
         self._loop_thread.stop()
         QApplication.instance().quit()
 
+    def _show_log_notification(self, message: str, levelno: int) -> None:
+        icon = QSystemTrayIcon.MessageIcon.Critical if levelno >= logging.ERROR else QSystemTrayIcon.MessageIcon.Warning
+        self._tray.showMessage("view-dock host", message, icon)
+
 
 class _TrayLogHandler(logging.Handler):
-    """Surfaces WARNING+ log records as tray balloon notifications.
+    """Surfaces WARNING+ log records as tray balloon notifications — these
+    matter even when the window is hidden/minimized to tray, which the
+    window's own log view (see _WindowLogHandler) can't help with then.
 
-    The TUI has room for a scrolling log pane; a tray applet doesn't, so
-    warnings that'd otherwise only hit the log (cursor overlay unavailable,
-    layout watcher unavailable, a dropped schema-invalid control message)
-    show up as notifications instead. INFO and below stay log-only — a
-    notification per frame-level message would be unusable.
+    emit() runs on whatever thread produced the log record (almost always
+    AsyncLoopThread's, not Qt's GUI thread) — it only formats and emits a
+    Qt signal, which is thread-safe; the actual showMessage() call happens
+    in TrayApp._show_log_notification(), invoked via a queued connection on
+    the GUI thread. See _StatusBridge's comment for why this separation
+    matters (directly calling a QSystemTrayIcon/QWidget method here crashed
+    the process).
     """
 
-    def __init__(self, tray: QSystemTrayIcon) -> None:
+    def __init__(self, bridge: _StatusBridge) -> None:
         super().__init__(level=logging.WARNING)
-        self._tray = tray
+        self._bridge = bridge
 
     def emit(self, record: logging.LogRecord) -> None:
-        icon = QSystemTrayIcon.MessageIcon.Critical if record.levelno >= logging.ERROR else QSystemTrayIcon.MessageIcon.Warning
-        self._tray.showMessage("view-dock host", self.format(record), icon)
+        self._bridge.log_for_tray.emit(self.format(record), record.levelno)
 
     def format(self, record: logging.LogRecord) -> str:
         return record.getMessage()
 
 
+class _WindowLogHandler(logging.Handler):
+    """Feeds every INFO+ log record into the window's log view — the full
+    stream, same as the TUI's log pane, now that there's a window with room
+    for it (the tray-only build only had WARNING+ balloon notifications).
+
+    Same thread-safety note as _TrayLogHandler: emit() only formats and
+    signals, never touches the QPlainTextEdit directly.
+    """
+
+    def __init__(self, bridge: _StatusBridge) -> None:
+        super().__init__(level=logging.INFO)
+        self._bridge = bridge
+        self.setFormatter(logging.Formatter("%(levelname)-7s %(name)s: %(message)s"))
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self._bridge.log_for_window.emit(self.format(record))
+
+
 def main() -> None:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+    app.setWindowIcon(QIcon(_ICON_PATH))
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
         print("No system tray available on this desktop.", file=sys.stderr)

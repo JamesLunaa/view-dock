@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=view-dock Host
+Comment=Stream this desktop to an iPad as an extended display
+Exec=__REPO_DIR__/host/scripts/launch-gui.sh
+Icon=__REPO_DIR__/host/gui/assets/icon.png
+Terminal=false
+Categories=Utility;
+StartupNotify=true

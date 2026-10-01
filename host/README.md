@@ -56,11 +56,17 @@ events received back from the iPad.
   `force-connector.sh` + env vars + `python -m host.main` by hand. Works
   anywhere there's a terminal, including over SSH with no X server. See
   "Running it" below.
-- `gui/` — KDE tray applet (`python -m host.gui`, needs `pip install
-  PySide6`): the same start/stop/presets as a `QSystemTrayIcon` instead of a
-  terminal — a colored dot for state, right-click menu, warnings as tray
-  notifications. Better fit for daily "set it and forget it" use on the
-  desktop itself.
+- `gui/` — KDE tray applet + window (`python -m host.gui`, needs `pip
+  install PySide6`): `window.py` is the actual controls (resolution,
+  start/stop, a live log) in a real window; `tray.py` owns the one
+  `HostRunner`/background loop and the `QSystemTrayIcon` the window hides to.
+  Closing the window defaults to minimizing to tray (configurable to Quit
+  instead, from a dropdown in the window itself) — closing it doesn't end an
+  active session either way unless you also choose Quit from the tray menu
+  or set that preference. `gui/assets/icon.png` + `gui/viewdock-host.desktop.in`
+  + `scripts/install-desktop-entry.sh`/`scripts/launch-gui.sh` are an
+  application-menu launcher — "an app icon, no CLI needed" — see "Running
+  it" below.
 
 ## Requirements
 
@@ -110,8 +116,13 @@ On an Xorg desktop with an iPad connected by cable:
 # 1. Once per boot — make a spare GPU connector look plugged in.
 ./host/scripts/force-connector.sh HDMI-A-1
 
-# 2a. KDE tray applet: resolution picker and start/stop from a tray icon
-#     instead of a terminal (needs `pip install PySide6` first).
+# 2a. KDE tray applet + window: resolution picker, start/stop, and a live log
+#     in an actual window, plus a tray icon it can hide to (needs
+#     `pip install PySide6` first). Install an application-menu launcher once
+#     so this never needs a terminal at all:
+./host/scripts/install-desktop-entry.sh
+#     Then launch "view-dock Host" from your app menu like anything else. Or
+#     run it directly:
 DISPLAY=:0 python -m host.gui
 
 # 2b. Or the terminal UI: same idea, no extra dependency, works over SSH.
@@ -125,13 +136,28 @@ DISPLAY=:0 VIEWDOCK_DISPLAY_WIDTH=1180 VIEWDOCK_DISPLAY_HEIGHT=820 \
 ```
 
 Then open the app on the iPad — it listens for USB automatically. In the
-TUI, stop with `x` (or `q` to stop-and-quit); on the CLI, Ctrl+C — either way
-the virtual output is torn down cleanly. A plain `kill` (SIGTERM) now also
-tears down cleanly; only `kill -9` skips it.
+GUI, Stop from the window or tray menu, then Quit from the tray menu (closing
+the window alone just hides it to tray by default — see "Closing the window"
+below); in the TUI, `x` (or `q` to stop-and-quit); on the CLI, Ctrl+C —
+either way the virtual output is torn down cleanly. A plain `kill` (SIGTERM)
+now also tears down cleanly on the CLI; only `kill -9` skips it (the GUI/TUI
+don't install a SIGTERM handler of their own — quit them through their own
+UI, not `kill`).
 
-The force-connector step (1) still has to run before either; the TUI detects
-a missing spare output and tells you which disconnected XRandR outputs are
-candidates rather than failing silently.
+The force-connector step (1) still has to run before any of these; the
+GUI/TUI detect a missing spare output and say which disconnected XRandR
+outputs are candidates rather than failing silently.
+
+### Closing the window
+
+The window's close button defaults to minimizing to tray rather than ending
+the session — click the tray icon (or "Show window" from its right-click
+menu) to bring it back. Change this from the dropdown at the bottom of the
+window itself ("When closing this window: Minimize to tray / Quit"); the
+choice persists across restarts (stored via `QSettings`, `~/.config/view-dock/
+host-gui.conf`). Either way, actually ending a running session needs Stop
+(window or tray menu) before Quit — closing the window, even set to "Quit",
+tears down a live session the same clean way Stop does first.
 
 ### Sizing: use logical points, not physical pixels
 
