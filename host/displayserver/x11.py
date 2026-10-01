@@ -228,11 +228,17 @@ class X11DisplayServer(DisplayServer):
 
     @staticmethod
     def _build_modeline(config: DisplayConfig) -> tuple[str, list[str]]:
+        # capture_width/capture_height, not width/height: the mode this
+        # function builds is the actual XRandR pixel geometry mss captures —
+        # equal to the logical point size unless VIEWDOCK_DISPLAY_SCALE
+        # opts into a sharper native-pixel capture (see DisplayConfig).
+        width, height = config.capture_width, config.capture_height
+
         # PID-suffixed so a mode left behind by a crashed/force-killed prior
         # run can never collide with this run's `--newmode` and fail with
         # RandR's BadName/RRCreateMode. Leftover modes themselves are swept up
         # by cleanup_stale_virtual_outputs().
-        mode_name = f"viewdock_{config.width}x{config.height}_{config.refresh_hz}_{os.getpid()}"
+        mode_name = f"viewdock_{width}x{height}_{config.refresh_hz}_{os.getpid()}"
         # -r: reduced-blanking CVT. Found live: plain `cvt` for 1180x820@60
         # produces a 79.25MHz-pixel-clock mode that a real Intel iGPU
         # (Tiger Lake Iris Xe) refused to activate as a third simultaneous
@@ -245,7 +251,7 @@ class X11DisplayServer(DisplayServer):
         # virtual mode — reduced blanking exists for exactly this kind of
         # fixed-timing digital path, not CRTs that need the wider blanking.
         cvt = subprocess.run(
-            ["cvt", "-r", str(config.width), str(config.height), str(config.refresh_hz)],
+            ["cvt", "-r", str(width), str(height), str(config.refresh_hz)],
             check=True,
             capture_output=True,
             text=True,
@@ -253,7 +259,43 @@ class X11DisplayServer(DisplayServer):
         match = re.search(r'Modeline\s+"\S+"\s+(.+)', cvt.stdout)
         if not match:
             raise RuntimeError(f"Could not parse `cvt` output: {cvt.stdout!r}")
-        return mode_name, match.group(1).split()
+        modeline = match.group(1).split()
+        return mode_name, X11DisplayServer._exact_width_modeline(modeline, width)
+
+    @staticmethod
+    def _exact_width_modeline(modeline: list[str], exact_width: int) -> list[str]:
+        """Shrink a `cvt -r` modeline's active width back to the exact pixel
+        count requested, undoing `cvt`'s multiple-of-8 rounding (e.g. 1180 ->
+        1184) that otherwise leaves the stream ~0.3% off the panel's aspect
+        ratio — a hairline letterbox on the iPad's aspect-fit.
+
+        `cvt -r`'s reduced-blanking horizontal timing is a fixed-width blank
+        (front porch + sync + back porch) tacked onto the active width,
+        independent of the active width itself — confirmed empirically
+        (`cvt -r 1176 820 60` and `cvt -r 1184 820 60` both produce a 160px
+        total horizontal blank). So shaving `delta` pixels off the rounded
+        active width and off every horizontal timing figure after it (sync
+        start/end, total) by the same `delta` reproduces exactly what `cvt`
+        would have produced had it not rounded — same blanking shape, just
+        `delta` pixels narrower. The pixel clock is scaled down by the same
+        proportion (`htotal` shrinks, so fewer pixels need to be clocked out
+        per line to hold the same line time, i.e. the same refresh rate).
+        """
+        pclk_str, hdisp_str, hss_str, hse_str, htotal_str, *rest = modeline
+        hdisp, hss, hse, htotal = int(hdisp_str), int(hss_str), int(hse_str), int(htotal_str)
+        delta = hdisp - exact_width
+        if delta == 0:
+            return modeline
+
+        pclk = float(pclk_str) * (htotal - delta) / htotal
+        return [
+            f"{pclk:.2f}",
+            str(hdisp - delta),
+            str(hss - delta),
+            str(hse - delta),
+            str(htotal - delta),
+            *rest,
+        ]
 
     @staticmethod
     def _find_monitor_geometry(output: str) -> dict[str, int]:

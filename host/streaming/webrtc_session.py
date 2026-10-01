@@ -155,8 +155,11 @@ class WebRtcSession:
         self._send_control_message(
             {
                 "type": messages.TYPE_DISPLAY_INFO,
-                "width": self._display_config.width,
-                "height": self._display_config.height,
+                # capture_width/capture_height: the actual video pixel size
+                # (equal to width/height unless VIEWDOCK_DISPLAY_SCALE is
+                # set) — orientation is unaffected since scaling is uniform.
+                "width": self._display_config.capture_width,
+                "height": self._display_config.capture_height,
                 "refresh_hz": self._display_config.refresh_hz,
                 "orientation": orientation,
             }

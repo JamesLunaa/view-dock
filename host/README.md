@@ -169,8 +169,38 @@ distort the built-in screen too) — drive it at 2360x1640 and every toolbar
 and glyph comes out at half its intended physical size. At 1180x820 the
 iPad upscales 2x and everything lands correctly.
 
-`cvt` rounds widths to a multiple of 8, so 1180 becomes 1184 — a 0.3%
-aspect difference, not visible.
+`cvt` rounds widths to a multiple of 8, so 1180 becomes 1184 — `x11.py`
+patches this back to the exact requested width internally, so the stream's
+aspect ratio always matches the configured size exactly.
+
+### Optional: sharper native-pixel capture (`VIEWDOCK_DISPLAY_SCALE`)
+
+By default the virtual display's actual XRandR mode is the iPad's logical
+point size (see above) — correct UI size, but the iPad upscales 2x to fill
+its retina panel, so text is softer than the panel is capable of. Setting
+`VIEWDOCK_DISPLAY_SCALE=2` makes the actual mode/capture resolution the
+iPad's full physical pixel size instead (e.g. 2360x1640), eliminating that
+upscale.
+
+This is **opt-in and narrow-purpose**: X11 has no per-output DPI, so nothing
+about an existing window changes when you raise this — an app you **drag
+over** from the built-in screen keeps rendering at whatever density it
+started with, and will look small in the corner of the now-bigger virtual
+canvas. The pairing that actually helps is an app you're launching **fresh**
+specifically for the virtual display, via
+`host/scripts/launch-on-virtual-display.sh <scale> <command>`, which sets
+`QT_SCALE_FACTOR`/`GDK_SCALE` so that app renders at matching density:
+
+```sh
+VIEWDOCK_DISPLAY_SCALE=2 python -m host.main
+# in another terminal, once the virtual display exists:
+./host/scripts/launch-on-virtual-display.sh 2 kate
+# then drag the new window onto the virtual display as usual
+```
+
+Leave this at the default (unset, i.e. 1) unless you specifically want that
+workflow — it doesn't improve anything for the normal drag-a-window-over
+usage this project is built around.
 
 ### Real GPU output on an Xorg desktop
 

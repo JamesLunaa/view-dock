@@ -59,6 +59,22 @@ def test_on_control_open_sends_valid_hello_and_display_info(width, height, expec
     assert display_info["orientation"] == expected_orientation
 
 
+def test_display_info_reports_capture_pixels_not_logical_points_under_scale():
+    """VIEWDOCK_DISPLAY_SCALE (DisplayConfig.capture_scale) makes the actual
+    video pixel size a multiple of the logical point size — display_info
+    should describe the former (the real stream), not the latter."""
+    config = DisplayConfig(width=1180, height=820, refresh_hz=60, capture_scale=2)
+    session = WebRtcSession(FakeDisplayServer(), FakeInputInjector(), config)
+    session._control_channel = RecordingChannel()
+
+    session._on_control_open()
+
+    import json
+
+    _hello, display_info = (json.loads(raw) for raw in session._control_channel.sent)
+    assert (display_info["width"], display_info["height"]) == (2360, 1640)
+
+
 def test_ice_consent_timing_is_patched_to_something_faster_than_aioice_default():
     """aioice's own defaults (CONSENT_INTERVAL=5, CONSENT_FAILURES=6) add up
     to ~30s before an unplugged cable surfaces as connectionState "failed" —
