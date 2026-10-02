@@ -113,9 +113,14 @@ Wi-Fi, Pencil pressure/hover, and Wayland support (phase 2).
 On an Xorg desktop with an iPad connected by cable:
 
 ```sh
-# 1. Once per boot — make a spare GPU connector look plugged in.
+# 1. Automatic: on start, the host forces a spare GPU connector "connected"
+#    itself (passwordless sudo, else a graphical pkexec prompt). Only run the
+#    script by hand if that fails or you want to pick the connector:
 ./host/scripts/force-connector.sh HDMI-A-1
 
+#    Hotplugging a real monitor onto the forced port mid-session: set
+#    VIEWDOCK_AUTO_HANDOFF=1 and the host moves the virtual display to
+#    another output (experimental, see Troubleshooting).
 # 2a. KDE tray applet + window: resolution picker, start/stop, and a live log
 #     in an actual window, plus a tray icon it can hide to (needs
 #     `pip install PySide6` first). Install an application-menu launcher once

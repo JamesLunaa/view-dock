@@ -66,3 +66,48 @@ def test_cleanup_stale_virtual_outputs_noop_when_clean():
 def test_find_available_output_keys_on_missing_geometry():
     with patch("subprocess.run", side_effect=_run_side_effect(_QUERY_NO_STALE_MODE)):
         assert X11DisplayServer.find_available_output() == "HDMI-A-1"
+
+
+_QUERY_ONLY_DISCONNECTED = """\
+Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384
+eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 344mm x 193mm
+HDMI-1 connected 1920x1080+1920+0 (normal left inverted right x axis y axis) 600mm x 340mm
+DP-1 disconnected (normal left inverted right x axis y axis)
+"""
+
+
+def test_ensure_spare_output_forces_disconnected_output():
+    with patch("subprocess.run", side_effect=_run_side_effect(_QUERY_ONLY_DISCONNECTED)), \
+         patch("host.displayserver.x11.force_connector", return_value="DP-1") as force, \
+         patch("host.displayserver.x11.time.sleep"):
+        assert X11DisplayServer().ensure_spare_output() == "DP-1"
+    force.assert_called_once_with("DP-1")
+
+
+def test_ensure_spare_output_skips_forcing_when_connected_output_free():
+    with patch("subprocess.run", side_effect=_run_side_effect(_QUERY_NO_STALE_MODE)), \
+         patch("host.displayserver.x11.force_connector") as force:
+        assert X11DisplayServer().ensure_spare_output() == "HDMI-A-1"
+    force.assert_not_called()
+
+
+def test_drm_candidates_maps_hdmi_name():
+    from host.displayserver.connector import drm_candidates
+
+    assert drm_candidates("HDMI-1") == ["HDMI-A-1", "HDMI-1"]
+    assert drm_candidates("DP-1") == ["DP-1"]
+
+
+def test_output_has_real_monitor_reads_edid_size():
+    forced = "HDMI-1 connected 1180x820+0+260 (normal) 0mm x 0mm\n"
+    real = "HDMI-1 connected 1180x820+0+260 (normal) 476mm x 267mm\n"
+    with patch("subprocess.run", side_effect=_run_side_effect(forced)):
+        assert not X11DisplayServer._output_has_real_monitor("HDMI-1")
+    with patch("subprocess.run", side_effect=_run_side_effect(real)):
+        assert X11DisplayServer._output_has_real_monitor("HDMI-1")
+
+
+def test_spare_rank_prefers_high_dp_over_hdmi():
+    from host.displayserver.x11 import _spare_rank
+
+    assert sorted(["HDMI-1", "DP-1", "DP-4", "DP-2"], key=_spare_rank) == ["DP-4", "DP-2", "DP-1", "HDMI-1"]
