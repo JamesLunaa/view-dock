@@ -36,6 +36,10 @@ _OUTPUT_STATUS_RE = re.compile(r"^(\S+) (?:dis)?connected\b(.*)$")
 _GEOMETRY_RE = re.compile(r"\d+x\d+\+\d+\+\d+")
 _PRIMARY_RE = re.compile(r"^(\S+) connected primary")
 _STALE_MODE_RE = re.compile(r"^\s+(viewdock_\S+)")
+# The cursor query can fail transiently (seen: a one-off XFixes BadAccess
+# right after a display rearrangement), so only give up on the overlay once
+# it has failed this many frames in a row (~2 s at 60 fps).
+_CURSOR_MAX_CONSECUTIVE_FAILURES = 120
 _DISCONNECTED_RE = re.compile(r"^(\S+) disconnected\b")
 
 
@@ -46,6 +50,7 @@ class X11DisplayServer(DisplayServer):
         self._sct: mss.base.MSSBase | None = None
         self._monitor: dict[str, int] | None = None
         self._cursor: X11CursorCompositor | None = None
+        self._cursor_failures = 0
         self._layout_watcher: ScreenLayoutWatcher | None = None
 
     def create_virtual_display(self, config: DisplayConfig) -> None:
@@ -82,6 +87,7 @@ class X11DisplayServer(DisplayServer):
 
         try:
             self._cursor = X11CursorCompositor()
+            self._cursor_failures = 0
         except Exception:
             # Cosmetic feature — a display without XFixes should still stream.
             logger.warning("Cursor overlay unavailable; streaming without it.", exc_info=True)
@@ -110,10 +116,18 @@ class X11DisplayServer(DisplayServer):
         if self._cursor is not None:
             try:
                 self._cursor.composite(frame, self._monitor)
+                self._cursor_failures = 0
             except Exception:
-                logger.warning("Cursor overlay failed; disabling it.", exc_info=True)
-                self._cursor.close()
-                self._cursor = None
+                self._cursor_failures += 1
+                if self._cursor_failures == 1:
+                    logger.warning("Cursor overlay failed; skipping it this frame.", exc_info=True)
+                if self._cursor_failures >= _CURSOR_MAX_CONSECUTIVE_FAILURES:
+                    logger.warning(
+                        "Cursor overlay failed %d frames in a row; disabling it.",
+                        self._cursor_failures,
+                    )
+                    self._cursor.close()
+                    self._cursor = None
 
         return frame
 

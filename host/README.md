@@ -298,7 +298,28 @@ WebRTC connection itself is still technically alive.
   something behind that the sweep couldn't see; `xrandr --delmode <output>
   <mode>` then `xrandr --rmmode <mode>` clears it manually.
 - **No cursor on the iPad.** The overlay self-disables and logs a warning if
-  XFixes is unavailable; check host output.
+  XFixes is unavailable; check host output. A single failed cursor query
+  (seen: an XFixes `BadAccess` right after rearranging displays) only skips
+  the cursor for that frame and logs one "skipping it this frame" warning;
+  the overlay is only disabled after ~2 s of consecutive failures.
+- **`Failed to open the uinput device: No such device` (Errno 19) on
+  connect.** `/dev/uinput` exists but the `uinput` kernel module isn't
+  loaded, so opening it fails. Load it now and on every boot:
+  ```sh
+  sudo modprobe uinput
+  echo uinput | sudo tee /etc/modules-load.d/uinput.conf
+  ```
+- **`iproxy: ... Address already in use` for port 8766.** An `iproxy` from
+  an earlier run that crashed or was `kill`ed is still holding the port.
+  `pkill -x iproxy`, then start the host again.
+- **iPad connects but shows no display (black), with a real monitor
+  plugged in.** The real monitor took the connector you usually force
+  (e.g. `HDMI-A-1`), so the host picked a different spare output, one
+  that was never forced at the DRM level and that KDE therefore won't
+  treat as a screen. `xrandr | grep connected` shows it as `disconnected`
+  but with a `viewdock_*` geometry. Stop the host with Ctrl+C, force that
+  connector instead (e.g. `./host/scripts/force-connector.sh DP-1`; the
+  DRM name is listed under `/sys/class/drm/card*-*`), and restart.
 - **USB stays on "waiting for iPad" after plugging in.** Normal if the app
   isn't open yet — a device shows up as USB-paired well before anything is
   listening on the tunneled port, and the host now retries patiently and
