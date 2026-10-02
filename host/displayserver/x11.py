@@ -21,12 +21,14 @@ import logging
 import os
 import re
 import subprocess
+import time
 
 import numpy as np
 import mss
 
 from host.config import DisplayConfig
 from host.displayserver.base import DisplayServer
+from host.displayserver.connector import force_connector, unforce_connector
 from host.displayserver.cursor import X11CursorCompositor
 from host.displayserver.geometry_watch import ScreenLayoutWatcher
 
@@ -40,7 +42,19 @@ _STALE_MODE_RE = re.compile(r"^\s+(viewdock_\S+)")
 # right after a display rearrangement), so only give up on the overlay once
 # it has failed this many frames in a row (~2 s at 60 fps).
 _CURSOR_MAX_CONSECUTIVE_FAILURES = 120
+_AUTO_HANDOFF = os.environ.get("VIEWDOCK_AUTO_HANDOFF") == "1"
+_HANDOFF_SETTLE_S = 3.0
 _DISCONNECTED_RE = re.compile(r"^(\S+) disconnected\b")
+
+
+def _spare_rank(name: str) -> tuple[int, int]:
+    """Sort key for choosing which disconnected output to force: the one a
+    user is least likely to plug a real monitor into. HDMI is the port people
+    actually use, so it goes last; among the rest, higher-numbered DP outputs
+    (typically unpopulated or dock-only) go first."""
+    m = re.search(r"(\d+)$", name)
+    index = int(m.group(1)) if m else 0
+    return (name.startswith("HDMI"), -index)
 
 
 class X11DisplayServer(DisplayServer):
@@ -52,9 +66,14 @@ class X11DisplayServer(DisplayServer):
         self._cursor: X11CursorCompositor | None = None
         self._cursor_failures = 0
         self._layout_watcher: ScreenLayoutWatcher | None = None
+        self._last_monitor_check = 0.0
+        self._warned_real_monitor = False
+        self._config: DisplayConfig | None = None
+        self._forced_output: str | None = None
+        self._handoff_at: float | None = None
 
     def create_virtual_display(self, config: DisplayConfig) -> None:
-        output = self.find_available_output()
+        output = self.ensure_spare_output()
         if output is None:
             raise RuntimeError(
                 "No spare output available for the virtual display. Configure a "
@@ -62,26 +81,8 @@ class X11DisplayServer(DisplayServer):
                 "the kernel/DRM level — see host/README.md."
             )
 
-        mode_name, modeline = self._build_modeline(config)
-        subprocess.run(["xrandr", "--newmode", mode_name, *modeline], check=True)
-        subprocess.run(["xrandr", "--addmode", output, mode_name], check=True)
-
-        enable_command = ["xrandr", "--output", output, "--mode", mode_name]
-        # All outputs on one X screen share a single coordinate canvas — with
-        # no position given, a new output defaults to 0,0, the same origin
-        # as everything else, so it just captures whatever's already visible
-        # there instead of being a genuinely separate extended area. Placing
-        # it beside the real primary output (if there is one — the isolated
-        # dummy-only test server in host/xorg/dummy.conf has none) makes this
-        # an actual extended desktop: windows dragged into that region show
-        # up here.
-        primary = self._find_primary_output()
-        if primary is not None and primary != output:
-            enable_command += ["--right-of", primary]
-        subprocess.run(enable_command, check=True)
-
-        self._output_name = output
-        self._mode_name = mode_name
+        self._config = config
+        self._enable_on(output, config)
         self._sct = mss.mss()
         self._monitor = self._find_monitor_geometry(output)
 
@@ -102,6 +103,75 @@ class X11DisplayServer(DisplayServer):
                 exc_info=True,
             )
             self._layout_watcher = None
+
+    def _enable_on(self, output: str, config: DisplayConfig) -> None:
+        mode_name, modeline = self._build_modeline(config)
+        subprocess.run(["xrandr", "--newmode", mode_name, *modeline], check=True)
+        subprocess.run(["xrandr", "--addmode", output, mode_name], check=True)
+
+        enable_command = ["xrandr", "--output", output, "--mode", mode_name]
+        # All outputs on one X screen share a single coordinate canvas — with
+        # no position given, a new output defaults to 0,0, the same origin
+        # as everything else, so it just captures whatever's already visible
+        # there instead of being a genuinely separate extended area. Placing
+        # it beside the real primary output (if there is one — the isolated
+        # dummy-only test server in host/xorg/dummy.conf has none) makes this
+        # an actual extended desktop: windows dragged into that region show
+        # up here.
+        primary = self._find_primary_output()
+        if primary is not None and primary != output:
+            enable_command += ["--right-of", primary]
+        subprocess.run(enable_command, check=True)
+
+        self._output_name = output
+        self._mode_name = mode_name
+
+    @staticmethod
+    def _output_has_real_monitor(output: str) -> bool:
+        """True if a physical monitor reports itself on `output`. A bare forced
+        connector reports `0mm x 0mm`; a real display's EDID gives its size."""
+        result = subprocess.run(["xrandr", "--query"], check=True, capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            if line.startswith(f"{output} "):
+                m = re.search(r"(\d+)mm x (\d+)mm", line)
+                return bool(m and int(m.group(1)) and int(m.group(2)))
+        return False
+
+    def _hand_off_to_real_monitor(self) -> None:
+        """A real monitor now sits on the connector we forced. Give it back and
+        move the virtual display to another spare output, then make sure at
+        least one real display is still lit."""
+        old = self._output_name
+        logger.info("Real monitor on %s; moving the virtual display to another output.", old)
+        try:
+            subprocess.run(["xrandr", "--output", old, "--off"], check=False)
+            subprocess.run(["xrandr", "--delmode", old, self._mode_name], check=False)
+            subprocess.run(["xrandr", "--rmmode", self._mode_name], check=False)
+            if self._forced_output == old:
+                unforce_connector(old)
+                self._forced_output = None
+            time.sleep(_HANDOFF_SETTLE_S)  # kernel re-probe + kscreen reaction
+            new = self.ensure_spare_output(exclude={old})
+            if new is None:
+                raise RuntimeError(f"A real monitor took {old} and no other spare output is available.")
+            self._enable_on(new, self._config)
+            self._monitor = self._find_monitor_geometry(new)
+        finally:
+            self._ensure_a_display_is_lit()
+
+    def _ensure_a_display_is_lit(self) -> None:
+        """Safety net: if no real output has geometry, let XRandR re-enable
+        everything it can rather than leaving the user at a black screen."""
+        result = subprocess.run(["xrandr", "--query"], check=True, capture_output=True, text=True)
+        lit = [
+            m.group(1)
+            for line in result.stdout.splitlines()
+            if (m := _OUTPUT_STATUS_RE.match(line)) and _GEOMETRY_RE.search(m.group(2))
+            and m.group(1) != self._output_name
+        ]
+        if not lit:
+            logger.error("No real display is lit after the handoff; running xrandr --auto.")
+            subprocess.run(["xrandr", "--auto"], check=False)
 
     def capture_frame(self) -> np.ndarray:
         if self._sct is None or self._monitor is None:
@@ -139,7 +209,35 @@ class X11DisplayServer(DisplayServer):
         """
         if self._layout_watcher is None or self._output_name is None:
             return
-        if not self._layout_watcher.layout_changed():
+        changed = self._layout_watcher.layout_changed()
+        now = time.monotonic()
+        # `xrandr --query` costs ~75 ms here — several dropped frames if it ran
+        # on a timer in the capture path — so only run it when RandR reports a
+        # layout change, plus a 1 s poll while a handoff is waiting to settle.
+        if changed or (self._handoff_at is not None and now - self._last_monitor_check > 1.0):
+            self._last_monitor_check = now
+            if self._output_has_real_monitor(self._output_name):
+                if not _AUTO_HANDOFF:
+                    if not self._warned_real_monitor:
+                        self._warned_real_monitor = True
+                        logger.warning(
+                            "A real monitor was plugged into %s, which the virtual display is "
+                            "using, so it will mirror the iPad. Set VIEWDOCK_AUTO_HANDOFF=1 to "
+                            "move the virtual display automatically, or restart the host.",
+                            self._output_name,
+                        )
+                elif self._handoff_at is None or changed:
+                    # Debounce: let KDE's kscreen finish reacting to the
+                    # hotplug before touching any output (touching them while
+                    # it reconfigures blanked every screen, found live).
+                    self._handoff_at = now + _HANDOFF_SETTLE_S
+                elif now >= self._handoff_at:
+                    self._handoff_at = None
+                    self._hand_off_to_real_monitor()
+                    return
+            else:
+                self._handoff_at = None
+        if not changed:
             return
 
         try:
@@ -191,13 +289,46 @@ class X11DisplayServer(DisplayServer):
         return [m.group(1) for line in result.stdout.splitlines() if (m := _DISCONNECTED_RE.match(line))]
 
     @staticmethod
-    def find_available_output() -> str | None:
+    def find_available_output(exclude: frozenset[str] | set[str] = frozenset()) -> str | None:
+        """First output with no geometry, preferring one XRandR reports as
+        connected (a forced connector or a dummy output) over a disconnected
+        one, which KDE won't treat as a screen until it's forced."""
+        free = [o for o in X11DisplayServer._free_outputs() if o[0] not in exclude]
+        for name, connected in free:
+            if connected:
+                return name
+        return free[0][0] if free else None
+
+    @staticmethod
+    def _free_outputs() -> list[tuple[str, bool]]:
         result = subprocess.run(["xrandr", "--query"], check=True, capture_output=True, text=True)
+        free = []
         for line in result.stdout.splitlines():
             match = _OUTPUT_STATUS_RE.match(line)
             if match and not _GEOMETRY_RE.search(match.group(2)):
-                return match.group(1)
-        return None
+                free.append((match.group(1), not line.startswith(f"{match.group(1)} disconnected")))
+        return free
+
+    def ensure_spare_output(self, exclude: set[str] = frozenset()) -> str | None:
+        """Like `find_available_output`, but if the only free outputs are
+        disconnected, forces one on at the DRM level first (the per-boot step
+        `scripts/force-connector.sh` used to be run by hand for)."""
+        free = [o for o in X11DisplayServer._free_outputs() if o[0] not in exclude]
+        if not free or any(connected for _, connected in free):
+            return X11DisplayServer.find_available_output(exclude)
+
+        for name in sorted((n for n, _ in free), key=_spare_rank):
+            logger.info("No connected spare output; forcing %s on.", name)
+            if force_connector(name) is None:
+                continue
+            self._forced_output = name
+            # The kernel re-probes asynchronously; wait for XRandR to catch up.
+            for _ in range(50):
+                if any(n == name and connected for n, connected in self._free_outputs()):
+                    return name
+                time.sleep(0.1)
+            logger.warning("%s did not come up after forcing; trying the next output.", name)
+        return free[0][0]  # nothing could be forced: caller proceeds and may fail visibly
 
     @staticmethod
     def _find_primary_output() -> str | None:
