@@ -258,6 +258,26 @@ output. Also: disabling and re-enabling a `DUMMY*` output reallocates its
 framebuffer without zeroing it, so stale content can reappear until
 something repaints — a driver quirk, not a bug here.
 
+## Stream quality tuning
+
+The video is H.264 (software x264), tuned in `streaming/encoder_tuning.py`.
+aiortc's stock encoder is meant for webcam calls (0.5-3 Mbps, default
+preset), which is too tight for a desktop full of text. Bitrate adapts
+automatically between a floor and ceiling, driven by RTT and packet loss
+from the host's own RTCP reports (`streaming/bitrate_controller.py`): it
+backs off quickly on loss/delay and probes upward slowly when clean. While
+streaming, a `pipeline:` line is logged every 5s with fps, capture/convert/
+encode time (avg/p95), RTT, loss, and the current target bitrate.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VIEWDOCK_INITIAL_BITRATE_MBPS` | `6.0` | Starting bitrate |
+| `VIEWDOCK_MIN_BITRATE_MBPS` / `VIEWDOCK_MAX_BITRATE_MBPS` | `1.0` / `10.0` | Adaptation range |
+| `VIEWDOCK_X264_PRESET` | `veryfast` | x264 preset (`ultrafast` = least CPU) |
+| `VIEWDOCK_TARGET_FPS` | `30` | Stream frame rate |
+| `VIEWDOCK_KEYFRAME_INTERVAL` | `30.0` | Seconds between keyframes |
+| `VIEWDOCK_VIDEO_CODEC` | `h264` | `vp8` to offer VP8 first instead |
+
 ## Reconnecting after a drop
 
 Unplugging the cable, killing the app, or any other disconnect that never

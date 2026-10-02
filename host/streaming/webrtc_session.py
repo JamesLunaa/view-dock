@@ -5,18 +5,24 @@ or `transport/usb.py` — only signaling/connection setup differs per transport.
 """
 
 import asyncio
+import fractions
 import json
 import logging
 import os
+import time
 
 import aioice.ice
 import jsonschema
 from aiortc import RTCDataChannel, RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from aiortc.mediastreams import VIDEO_CLOCK_RATE, VIDEO_TIME_BASE, MediaStreamError
 from av import VideoFrame
 
 from host.config import DisplayConfig
 from host.displayserver.base import DisplayServer
 from host.input.injector import InputInjector
+from host.streaming import encoder_tuning
+from host.streaming.bitrate_controller import BitrateController, NetworkSample
+from host.streaming.metrics import PipelineMetrics
 from host.transport.base import Transport
 from protocol import messages, validation
 
@@ -51,22 +57,57 @@ print(
 )
 
 
+_FRAME_PTIME = 1.0 / encoder_tuning.FRAME_RATE
+_MONITOR_INTERVAL_S = 1.0
+_METRICS_LOG_EVERY_S = 5.0
+# An iPad `stats` message older than this is ignored when sampling the network.
+_IPAD_STATS_MAX_AGE_S = 3.0
+
+
 class CaptureVideoTrack(VideoStreamTrack):
     """Wraps DisplayServer.capture_frame() as an aiortc video track."""
 
-    def __init__(self, display_server: DisplayServer) -> None:
+    def __init__(self, display_server: DisplayServer, metrics: PipelineMetrics | None = None) -> None:
         super().__init__()
         self._display_server = display_server
+        self._metrics = metrics or PipelineMetrics()
+
+    async def next_timestamp(self) -> tuple[int, fractions.Fraction]:
+        # Same deadline-based pacing as aiortc's VideoStreamTrack, except it
+        # re-syncs instead of bursting when it falls behind: aiortc's version
+        # keeps advancing a fixed step from the *original* start time, so one
+        # slow capture (a heavy window drag) is followed by back-to-back
+        # frames racing to catch up — a visible hitch plus a queue that adds
+        # latency. Dropping the missed slots keeps the stream current.
+        if self.readyState != "live":
+            raise MediaStreamError
+
+        if hasattr(self, "_timestamp"):
+            self._timestamp += int(_FRAME_PTIME * VIDEO_CLOCK_RATE)
+            wait = self._start + (self._timestamp / VIDEO_CLOCK_RATE) - time.time()
+            if wait < -_FRAME_PTIME:
+                self._start = time.time() - self._timestamp / VIDEO_CLOCK_RATE
+            else:
+                await asyncio.sleep(max(wait, 0))
+        else:
+            self._start = time.time()
+            self._timestamp = 0
+        return self._timestamp, VIDEO_TIME_BASE
 
     async def recv(self) -> VideoFrame:
         pts, time_base = await self.next_timestamp()
 
         loop = asyncio.get_event_loop()
+        started = time.perf_counter()
         rgb = await loop.run_in_executor(None, self._display_server.capture_frame)
+        captured = time.perf_counter()
 
         frame = VideoFrame.from_ndarray(rgb, format="rgb24")
         frame.pts = pts
         frame.time_base = time_base
+        self._metrics.frame_produced(
+            captured, (captured - started) * 1000, (time.perf_counter() - captured) * 1000
+        )
         return frame
 
 
@@ -85,9 +126,22 @@ class WebRtcSession:
         self._pc = RTCPeerConnection()
         self._control_channel: RTCDataChannel | None = None
         self._closed = asyncio.Event()
+        self._metrics = PipelineMetrics()
+        self._bitrate = BitrateController(
+            encoder_tuning.MIN_BITRATE,
+            encoder_tuning.MAX_BITRATE,
+            encoder_tuning.INITIAL_BITRATE,
+            target_fps=encoder_tuning.FRAME_RATE,
+        )
+        self._ipad_stats: tuple[float, NetworkSample] | None = None
+        self._monitor_task: asyncio.Task | None = None
 
     async def start(self, transport: Transport) -> None:
-        self._pc.addTrack(CaptureVideoTrack(self._display_server))
+        encoder_tuning.install()
+        self._pc.addTrack(CaptureVideoTrack(self._display_server, self._metrics))
+        for transceiver in self._pc.getTransceivers():
+            if transceiver.kind == "video":
+                transceiver.setCodecPreferences(encoder_tuning.preferred_codecs())
 
         self._control_channel = self._pc.createDataChannel("control")
         self._control_channel.on("open", self._on_control_open)
@@ -95,6 +149,7 @@ class WebRtcSession:
         self._pc.on("connectionstatechange", self._on_connection_state_change)
 
         await self._negotiate(transport)
+        self._monitor_task = asyncio.ensure_future(self._monitor_stream())
 
     async def wait_closed(self) -> None:
         await self._closed.wait()
@@ -102,8 +157,56 @@ class WebRtcSession:
     async def close(self) -> None:
         if self._closed.is_set():
             return
+        if self._monitor_task is not None:
+            self._monitor_task.cancel()
         await self._pc.close()
         self._closed.set()
+
+    async def _monitor_stream(self) -> None:
+        """Once a second: sample the network, adapt bitrate; every few
+        seconds, log the pipeline timings."""
+        last_log = time.monotonic()
+        while True:
+            await asyncio.sleep(_MONITOR_INTERVAL_S)
+            try:
+                now = time.monotonic()
+                sample = await self._sample_network(now)
+                self._metrics.rtt_ms = sample.rtt_ms
+                self._metrics.loss_fraction = sample.loss_fraction
+                self._metrics.encode_ms.extend(encoder_tuning.drain_encode_ms())
+
+                new_bitrate = self._bitrate.update(sample, now)
+                if new_bitrate is not None:
+                    applied = encoder_tuning.set_target_bitrate(new_bitrate)
+                    logger.info(
+                        "Adaptive bitrate -> %.2f Mbps (rtt=%s loss=%s fps=%s)",
+                        applied / 1e6, sample.rtt_ms, sample.loss_fraction, sample.fps,
+                    )
+                self._metrics.bitrate_bps = encoder_tuning.current_target_bitrate()
+
+                if now - last_log >= _METRICS_LOG_EVERY_S:
+                    last_log = now
+                    self._metrics.log()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning("Stream monitor tick failed", exc_info=True)
+
+    async def _sample_network(self, now: float) -> NetworkSample:
+        rtt_ms = loss = None
+        for report in (await self._pc.getStats()).values():
+            if report.type == "remote-inbound-rtp" and report.kind == "video":
+                if report.roundTripTime is not None:
+                    rtt_ms = report.roundTripTime * 1000
+                # RTCP carries fraction lost as a raw 0-255 byte.
+                loss = report.fractionLost / 256
+        fps = None
+        if self._ipad_stats is not None and now - self._ipad_stats[0] <= _IPAD_STATS_MAX_AGE_S:
+            ipad = self._ipad_stats[1]
+            fps = ipad.fps
+            if rtt_ms is None:
+                rtt_ms = ipad.rtt_ms
+        return NetworkSample(rtt_ms=rtt_ms, loss_fraction=loss, fps=fps)
 
     async def _negotiate(self, transport: Transport) -> None:
         offer = await self._pc.createOffer()
@@ -185,6 +288,9 @@ class WebRtcSession:
         if message_type == messages.TYPE_INPUT_EVENT:
             self._input_injector.handle_input_event(message)
         elif message_type == messages.TYPE_STATS:
-            pass  # TODO: feed into adaptive bitrate logic.
+            self._ipad_stats = (
+                time.monotonic(),
+                NetworkSample(rtt_ms=message["rtt_ms"], fps=message["fps"]),
+            )
         elif message_type == messages.TYPE_BYE:
             asyncio.ensure_future(self.close())
