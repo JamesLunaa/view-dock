@@ -4,7 +4,7 @@ curses UI and the Qt tray offer the exact same choices instead of drifting.
 
 from dataclasses import dataclass
 
-from host.config import IPAD_PRESETS, DisplayConfig
+from host.config import ANDROID_PRESETS, IPAD_PRESETS, DisplayConfig
 
 CUSTOM_LABEL = "Custom (VIEWDOCK_DISPLAY_* env vars)"
 
@@ -17,7 +17,8 @@ class Preset:
 
 def build_presets() -> list[Preset]:
     presets = [
-        Preset(f"{name} ({w}x{h})", DisplayConfig(width=w, height=h)) for name, (w, h) in IPAD_PRESETS.items()
+        Preset(f"{name} ({w}x{h})", DisplayConfig(width=w, height=h))
+        for name, (w, h) in {**IPAD_PRESETS, **ANDROID_PRESETS}.items()
     ]
     presets.append(Preset(CUSTOM_LABEL, None))
     return presets

@@ -16,6 +16,8 @@ import os
 from dataclasses import dataclass
 from typing import Callable
 
+from websockets.exceptions import ConnectionClosed
+
 from host.config import DisplayConfig, HostConfig
 from host.displayserver import (
     DisplayServer,
@@ -24,8 +26,8 @@ from host.displayserver import (
     X11DisplayServer,
 )
 from host.input.injector import InputInjector
-from host.streaming import WebRtcSession
-from host.transport import UsbTransport, WifiTransport
+from host.streaming import WebRtcSession, WiredSession
+from host.transport import AdbTransport, UsbTransport, WifiTransport
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,7 @@ logger = logging.getLogger(__name__)
 class State(enum.Enum):
     IDLE = "idle"
     STARTING = "starting"
-    WAITING = "waiting for iPad"
+    WAITING = "waiting for device"
     CONNECTED = "connected"
     STOPPING = "stopping"
     ERROR = "error"
@@ -45,25 +47,38 @@ class StatusEvent:
     detail: str = ""
 
 
+async def _find_wired_transport() -> UsbTransport | None:
+    """First wired transport with a device attached: usbmuxd for an iPad,
+    then `adb` for an Android device. `AdbTransport` is a `UsbTransport`
+    subclass, so everything downstream that only cares "is this a cable?"
+    can keep checking `isinstance(transport, UsbTransport)`."""
+    for transport_class in (UsbTransport, AdbTransport):
+        transport = transport_class()
+        if await transport.is_available():
+            return transport
+    return None
+
+
 async def choose_transport(config: HostConfig):
-    usb = UsbTransport()
-    if config.prefer_usb and await usb.is_available():
-        return usb
+    if config.prefer_usb:
+        wired = await _find_wired_transport()
+        if wired is not None:
+            return wired
     return WifiTransport()
 
 
 async def _wait_until_usb_available(poll_interval: float = 1.0) -> None:
-    """Polls until a USB-attached iPad shows up. Used to let a session that
-    fell back to Wi-Fi (no device plugged in yet when it started) switch to
-    USB the moment a cable appears, instead of only checking once at
-    startup and then ignoring USB for the rest of the session."""
-    usb = UsbTransport()
-    while not await usb.is_available():
+    """Polls until a USB-attached iPad or Android device shows up. Used to
+    let a session that fell back to Wi-Fi (no device plugged in yet when it
+    started) switch to USB the moment a cable appears, instead of only
+    checking once at startup and then ignoring USB for the rest of the
+    session."""
+    while await _find_wired_transport() is None:
         await asyncio.sleep(poll_interval)
 
 
 async def _wait_until_usb_unavailable(poll_interval: float = 1.0) -> None:
-    """Polls until a USB-attached iPad disappears.
+    """Polls until a USB-attached iPad or Android device disappears.
 
     Found live: WebRTC's ICE can keep a connection's actual video/data
     flowing over Wi-Fi even after the USB cable is unplugged, if the iPad
@@ -76,8 +91,7 @@ async def _wait_until_usb_unavailable(poll_interval: float = 1.0) -> None:
     that the moment the device physically disappears, instead of waiting on
     (or never getting) a WebRTC-level failure.
     """
-    usb = UsbTransport()
-    while await usb.is_available():
+    while await _find_wired_transport() is not None:
         await asyncio.sleep(poll_interval)
 
 
@@ -167,7 +181,10 @@ class HostRunner:
             if watch_usb_task is not None and watch_usb_task in done:
                 self._report(State.STARTING, "USB connected; switching from Wi-Fi")
                 await transport.disconnect()
-                transport = UsbTransport()
+                # The cable that triggered the switch could vanish again before
+                # this re-check; fall back to the iPad transport rather than
+                # crash — its own connect() retries until a device appears.
+                transport = await _find_wired_transport() or UsbTransport()
                 transport_name = type(transport).__name__
                 continue
 
@@ -210,27 +227,43 @@ class HostRunner:
             # mean restarting the session from the UI. Only an explicit
             # request_stop() exits this loop.
             while True:
-                session = WebRtcSession(display_server, input_injector, config.display)
+                # A wired transport (Android over adb) streams video over its own
+                # tunnel; everything else negotiates WebRTC.
+                session_class = WiredSession if transport.supports_wired_stream else WebRtcSession
+                session = session_class(display_server, input_injector, config.display)
                 try:
                     self._report(State.WAITING, transport_name)
-                    await session.start(transport)
-                    self._report(State.CONNECTED, transport_name)
+                    try:
+                        await session.start(transport)
+                    except ConnectionClosed as error:
+                        # The device closed the signaling connection before
+                        # the handshake finished — found live with the
+                        # Android app: right after a dropped session the host
+                        # reconnects through the tunnel, and if that lands
+                        # on the app's about-to-be-recycled listener it gets
+                        # `1001 going away`. That's "device not ready yet",
+                        # the same as a disconnect, not a reason to kill the
+                        # whole session (and the virtual display with it).
+                        logger.warning("Device closed signaling mid-handshake (%s); waiting for it to reconnect.", error)
+                        was_stop_requested = self._stop_requested.is_set()
+                    else:
+                        self._report(State.CONNECTED, transport_name)
 
-                    closed = asyncio.ensure_future(session.wait_closed())
-                    stopped = asyncio.ensure_future(self._stop_requested.wait())
-                    waitables = {closed, stopped}
+                        closed = asyncio.ensure_future(session.wait_closed())
+                        stopped = asyncio.ensure_future(self._stop_requested.wait())
+                        waitables = {closed, stopped}
 
-                    usb_gone_task = None
-                    if isinstance(transport, UsbTransport):
-                        usb_gone_task = asyncio.ensure_future(_wait_until_usb_unavailable())
-                        waitables.add(usb_gone_task)
+                        usb_gone_task = None
+                        if isinstance(transport, UsbTransport):
+                            usb_gone_task = asyncio.ensure_future(_wait_until_usb_unavailable())
+                            waitables.add(usb_gone_task)
 
-                    done, pending = await asyncio.wait(waitables, return_when=asyncio.FIRST_COMPLETED)
-                    for task in pending:
-                        task.cancel()
-                    if pending:
-                        await asyncio.gather(*pending, return_exceptions=True)
-                    was_stop_requested = stopped in done
+                        done, pending = await asyncio.wait(waitables, return_when=asyncio.FIRST_COMPLETED)
+                        for task in pending:
+                            task.cancel()
+                        if pending:
+                            await asyncio.gather(*pending, return_exceptions=True)
+                        was_stop_requested = stopped in done
                 finally:
                     # Closing here unconditionally is what makes the USB-gone
                     # watchdog above actually force a disconnect: wait_closed()
@@ -243,7 +276,7 @@ class HostRunner:
                 if was_stop_requested:
                     break
 
-                self._report(State.WAITING, "iPad disconnected — waiting to reconnect")
+                self._report(State.WAITING, "device disconnected — waiting to reconnect")
                 established = await self._establish_transport(config)
                 if established is None:
                     # _establish_transport() already reported STOPPING/IDLE

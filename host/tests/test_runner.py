@@ -8,10 +8,25 @@ session is already established.
 import asyncio
 from unittest.mock import patch
 
+import pytest
+
 from host.config import HostConfig
 from host.runner import HostRunner, State
+from host.transport.adb import AdbTransport
 from host.transport.base import Transport
 from host.transport.wifi import WifiTransport
+
+
+@pytest.fixture(autouse=True)
+def no_real_adb_device():
+    """The runner also probes `adb devices`; keep these tests independent of
+    whether an Android phone happens to be plugged into the machine."""
+
+    async def none_attached(_self) -> bool:
+        return False
+
+    with patch.object(AdbTransport, "is_available", none_attached):
+        yield
 
 
 class HangingTransport(Transport):
@@ -195,7 +210,7 @@ class FakeSession:
 
 def test_disconnect_reconnects_without_tearing_down_display():
     """Covers the actual feature request: unplugging/closing the app should
-    drop back to 'waiting for iPad', not require pressing Start again — the
+    drop back to 'waiting for device', not require pressing Start again — the
     virtual display and input injector should stay up across a reconnect,
     only torn down on an explicit request_stop()."""
 
@@ -376,5 +391,64 @@ def test_usb_unplug_forces_disconnect_even_if_webrtc_stays_connected():
             await asyncio.wait_for(run_task, timeout=1)
 
         assert states[-1] == (State.IDLE, "")
+
+    asyncio.run(body())
+
+
+class ClosesMidHandshakeSession(FakeSession):
+    """The first session's start() dies the way a device-side listener being
+    recycled does — the signaling websocket closes with 1001 before the
+    answer arrives. Later sessions connect normally."""
+
+    async def start(self, _transport) -> None:
+        if len(FakeSession.instances) == 1:
+            from websockets.exceptions import ConnectionClosedOK
+            from websockets.frames import Close
+
+            raise ConnectionClosedOK(Close(1001, ""), Close(1001, ""), rcvd_then_sent=True)
+        await super().start(_transport)
+
+
+def test_signaling_closing_mid_handshake_retries_instead_of_crashing():
+    """Covers the crash hit live: `ConnectionClosedOK: received 1001 (going
+    away)` out of session.start() propagated out of HostRunner.run() and took
+    the whole host session down. It must wait for the device and try again,
+    keeping the virtual display up."""
+
+    async def body():
+        FakeUsbTransport.instances.clear()
+        FakeInputInjectorForRunner.instances.clear()
+        FakeSession.instances.clear()
+        display_server = FakeDisplayServerForRunner()
+        states: list[tuple[State, str]] = []
+
+        runner = HostRunner(
+            display_config=None,
+            on_status=lambda e: states.append((e.state, e.detail)),
+        )
+
+        async def fake_choose_transport(_config):
+            return FakeUsbTransport()
+
+        with (
+            patch("host.runner.X11DisplayServer.cleanup_stale_virtual_outputs", return_value=[]),
+            patch("host.runner.choose_transport", side_effect=fake_choose_transport),
+            patch("host.runner.choose_display_server", return_value=display_server),
+            patch("host.runner.InputInjector", FakeInputInjectorForRunner),
+            patch("host.runner.WebRtcSession", ClosesMidHandshakeSession),
+        ):
+            run_task = asyncio.ensure_future(runner.run())
+            await asyncio.sleep(0.1)
+
+            assert not run_task.done(), "run() must not have crashed"
+            assert len(FakeSession.instances) == 2, "should retry with a fresh session"
+            assert FakeSession.instances[1].started
+            assert (State.CONNECTED, "FakeUsbTransport") in states
+            assert display_server.created == 1 and display_server.destroyed == 0
+
+            runner.request_stop()
+            await asyncio.wait_for(run_task, timeout=1)
+
+        assert display_server.destroyed == 1
 
     asyncio.run(body())

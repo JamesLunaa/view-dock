@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Two overlapping screens: the host display and its extension. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,36h34a3,3 0 0 1 3,3v22a3,3 0 0 1 -3,3H30a3,3 0 0 1 -3,-3V39a3,3 0 0 1 3,-3z" />
+    <path
+        android:fillColor="#7FB2FF"
+        android:pathData="M52,50h26a3,3 0 0 1 3,3v18a3,3 0 0 1 -3,3H52a3,3 0 0 1 -3,-3V53a3,3 0 0 1 3,-3z" />
+</vector>

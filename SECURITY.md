@@ -7,8 +7,8 @@ Please report security issues privately, **not** as a public issue:
 - Use GitHub's private vulnerability reporting — the **Report a vulnerability**
   button under this repository's [Security tab](https://github.com/JamesLunaa/view-dock/security).
 
-Include what you were able to do, which side you were attacking (host, iPad,
-or the network between them), and the transport in use (Wi-Fi or USB). A
+Include what you were able to do, which side you were attacking (host, iPad app,
+Android app, or the network between them), and the transport in use (Wi-Fi or USB). A
 proof-of-concept is welcome but not required.
 
 Expect a first response within a week. This is a small hobby project
@@ -28,12 +28,22 @@ local network. There is no authentication of any kind.**
 
 ### What is protected
 
-- **The WebRTC session itself is encrypted.** Video rides SRTP and the
+- **Every WebRTC session is encrypted.** Video rides SRTP and the
   `control` data channel rides SCTP-over-DTLS, both keyed by the mandatory
   DTLS handshake. This is not optional and there is no plaintext fallback —
-  it comes from WebRTC itself (`aiortc` on the host,
-  Google's WebRTC framework on the iPad). A passive observer on the LAN
-  cannot read your screen contents off the wire.
+  it comes from WebRTC itself (`aiortc` on the host, Google's WebRTC
+  framework on the iPad and Android). A passive observer on the LAN cannot
+  read your screen contents off the wire. This covers Wi-Fi sessions and the
+  iPad.
+- **Android over USB is not WebRTC, and is not encrypted — but never touches
+  the network.** The wired stream (`host/streaming/wired_session.py`,
+  protocol "Wired stream") is plain H.264 and JSON on a WebSocket that
+  `adb forward` carries over the USB cable. The app's listener
+  (`UsbSignaling` in `android/`) binds `127.0.0.1` only, so unlike the iPad's
+  (below) it cannot be reached from the Wi-Fi network. What a USB session
+  does rely on is the physical cable and the phone's USB debugging
+  authorization: anyone who can run `adb` against an authorized device can
+  already do far more than view this stream.
 - **Input events are schema-validated and bounded.** Every `control` message
   is validated against `protocol/schema/*.json` before it is acted on, and
   malformed messages are dropped (`host/streaming/webrtc_session.py`).
@@ -62,7 +72,8 @@ local network. There is no authentication of any kind.**
   encryption protects against passive sniffing but not against an active
   attacker who can intercept and rewrite signaling — they can substitute
   their own fingerprint and sit in the middle.
-- **The iPad's USB listener is not USB-only.** For the wired transport the
+- **The iPad's USB listener is not USB-only** (the Android app's is: it
+  binds loopback only). For the wired transport the
   iPad is the server (`ipad/Sources/Networking/WebSocketServer.swift`), and
   its `NWListener` on port 8766 binds all interfaces — while the app is
   waiting for a host, another device on the same Wi-Fi network can connect
@@ -71,15 +82,19 @@ local network. There is no authentication of any kind.**
 - **Dependencies are third-party and not vendored.** The host pulls
   `aiortc`/`av`/`numpy` and friends from PyPI; the iPad app pulls a
   prebuilt WebRTC binary framework from
-  [stasel/WebRTC](https://github.com/stasel/WebRTC). Both are trusted as-is.
+  [stasel/WebRTC](https://github.com/stasel/WebRTC); the Android app pulls
+  prebuilt WebRTC (`stream-webrtc-android`) and `Java-WebSocket` from Maven
+  Central. All are trusted as-is.
 
 ### Practical advice
 
 - Run it on a home/trusted network, or a network segment you control.
 - Prefer USB when you can. It still has no authentication, but reaching the
-  host's side of the tunnel requires a cable and an iOS trust pairing.
+  host's side of the tunnel requires a cable and an iOS trust pairing (or,
+  on Android, an accepted USB-debugging authorization) — and the Android USB
+  stream stays off the network entirely.
 - If you are on a shared or public network, firewall the host port, e.g.
-  limit `8765/tcp` to your iPad's address, or don't run it at all.
+  limit `8765/tcp` to your device's address, or don't run it at all.
 - Close the host when you're not using it. The Wi-Fi listener is open for
   as long as a session is running or waiting.
 

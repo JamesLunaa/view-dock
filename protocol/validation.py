@@ -21,6 +21,7 @@ _SCHEMA_FILENAME_BY_TYPE = {
     messages.TYPE_INPUT_EVENT: "input_event.json",
     messages.TYPE_STATS: "stats.json",
     messages.TYPE_BYE: "bye.json",
+    messages.TYPE_KEYFRAME_REQUEST: "keyframe_request.json",
 }
 
 

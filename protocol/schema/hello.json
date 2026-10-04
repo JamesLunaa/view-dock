@@ -5,7 +5,7 @@
   "required": ["type", "role", "protocol_version"],
   "properties": {
     "type": { "const": "hello" },
-    "role": { "enum": ["host", "ipad"] },
+    "role": { "enum": ["host", "ipad", "android"] },
     "protocol_version": { "type": "string", "pattern": "^\\d+\\.\\d+$" }
   },
   "additionalProperties": false

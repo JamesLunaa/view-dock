@@ -31,6 +31,9 @@ class UsbTransport(Transport):
         self._iproxy_log_task: asyncio.Task | None = None
         self._connection: ClientConnection | None = None
 
+    def _tunnel_argv(self) -> list[str]:
+        return ["iproxy", str(self._local_port), str(self._device_port)]
+
     async def is_available(self) -> bool:
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -52,7 +55,7 @@ class UsbTransport(Transport):
         # curses for cursor control. Capture and route through logging
         # instead, same as every other component.
         self._iproxy_process = await asyncio.create_subprocess_exec(
-            "iproxy", str(self._local_port), str(self._device_port),
+            *self._tunnel_argv(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
@@ -86,6 +89,18 @@ class UsbTransport(Transport):
         assert self._iproxy_process is not None and self._iproxy_process.stdout is not None
         async for line in self._iproxy_process.stdout:
             logger.info("iproxy: %s", line.decode(errors="replace").rstrip())
+
+    async def send_message(self, data: str | bytes) -> None:
+        """Send one raw WebSocket message (text or binary) — used by the wired
+        stream, where this connection carries the whole session."""
+        if self._connection is None:
+            raise RuntimeError("Not connected.")
+        await self._connection.send(data)
+
+    async def receive_message(self) -> str | bytes:
+        if self._connection is None:
+            raise RuntimeError("Not connected.")
+        return await self._connection.recv()
 
     async def send_signal(self, message: dict) -> None:
         if self._connection is None:
@@ -127,7 +142,12 @@ class UsbTransport(Transport):
                 # bites when there's a 20s+ gap between connecting and the
                 # first send_signal() (e.g. slow ICE gathering, or a human
                 # pausing mid-debug) — ordinary fast sessions never hit it.
-                return await connect(f"ws://127.0.0.1:{self._local_port}", ping_interval=None)
+                return await connect(
+                    f"ws://127.0.0.1:{self._local_port}",
+                    ping_interval=None,
+                    # Video frames are already compressed; deflating them just burns CPU.
+                    compression=None,
+                )
             except (ConnectionRefusedError, OSError, websockets.exceptions.WebSocketException):
                 attempt += 1
                 # Fast retries cover the "iproxy just needs a moment to bind"

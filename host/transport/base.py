@@ -6,6 +6,12 @@ from abc import ABC, abstractmethod
 
 
 class Transport(ABC):
+    # True when this transport's connection should carry the whole session
+    # (video as binary frames + control messages) instead of just the WebRTC
+    # SDP handshake — see "Wired stream" in protocol/PROTOCOL.md. Only
+    # transports that expose `send_message`/`receive_message` may set it.
+    supports_wired_stream = False
+
     @abstractmethod
     async def is_available(self) -> bool:
         """Whether this transport currently has a reachable iPad."""

@@ -18,12 +18,15 @@ sides at once:
 |---|---|---|
 | `host/` | Python server on the Arch machine: virtual display, capture, encoding, WebRTC, input injection, three front-ends (GUI/TUI/CLI). | [`host/README.md`](host/README.md) |
 | `ipad/` | Native iPadOS app (SwiftUI + WebRTC), generated from `project.yml` by XcodeGen. | [`ipad/README.md`](ipad/README.md) |
-| `protocol/` | The wire contract between the two: message types, JSON Schemas. | [`protocol/PROTOCOL.md`](protocol/PROTOCOL.md) |
+| `android/` | Native Android app (Kotlin + Jetpack Compose, Gradle). | [`android/README.md`](android/README.md) |
+| `protocol/` | The wire contract between host and apps: message types, JSON Schemas, the wired stream. | [`protocol/PROTOCOL.md`](protocol/PROTOCOL.md) |
 
 Inside `host/`, the layering is: `displayserver/` (create and capture a
 virtual display, behind a per-display-server interface), `transport/`
-(Wi-Fi and USB signaling bootstrap, behind a common `Transport` base),
-`streaming/` (one WebRTC session: video track + `control` data channel),
+(Wi-Fi, iPad USB via usbmuxd, and Android USB via `adb`, behind a common
+`Transport` base),
+`streaming/` (one session: a WebRTC video track + `control` data channel, or
+for Android over USB the wired H.264 stream),
 `input/` (uinput injection), with `runner.py`/`main.py` wiring them together
 and `gui/` + `ui/` as alternative front-ends over the same runner. Changes
 that stay inside one of those boxes are the easy ones; anything crossing
@@ -33,7 +36,9 @@ that stay inside one of those boxes are the easy ones; anything crossing
 
 Follow the host setup steps in the [README](README.md#1-host-setup-on-the-arch-linux-machine)
 to get a working `.venv` with `host/requirements.txt` installed. For the
-iPad app, see [`ipad/README.md`](ipad/README.md).
+iPad app, see [`ipad/README.md`](ipad/README.md); for the Android app, see
+[`android/README.md`](android/README.md) (it builds on Linux with just a JDK
+and the Android SDK).
 
 The host runs three ways, all on the same underlying runner — use whichever
 suits what you're debugging:
@@ -63,6 +68,17 @@ python -m pytest host/tests
 CI (`.github/workflows/tests.yml`) runs this same suite on every push and
 pull request, installing from the lock file described below.
 
+The Android app has JVM unit tests (protocol messages and touch-coordinate
+mapping) that need no device:
+
+```sh
+cd android && ./gradlew testDebugUnitTest
+```
+
+CI runs the host suite only; the Android tests are run by hand for now. There
+is no automated test for the video path on a real decoder — that needs a
+device.
+
 When adding tests, follow what's already in `host/tests/`: each module
 targets one unit (`test_runner.py`, `test_usb_transport.py`, …), external
 commands and devices are patched rather than invoked, and the docstring at
@@ -75,18 +91,20 @@ doesn't work in the Simulator).
 
 ## Protocol changes
 
-`protocol/` is the contract between `host/` and `ipad/`. If you change
+`protocol/` is the contract between `host/`, `ipad/` and `android/`. If you change
 `protocol/schema/*.json` or `protocol/messages.py`, update both
 implementations in the same PR rather than letting them drift — see
 [`protocol/PROTOCOL.md`](protocol/PROTOCOL.md). Concretely, a new or changed
-message means touching all four of:
+message means touching all five of:
 
 1. `protocol/schema/<type>.json` — the schema, which the host validates
    against at runtime.
 2. `protocol/messages.py` — the shared constants.
 3. `ipad/Sources/Protocol/Messages.swift` — the Swift mirror of those
    constants (Swift can't import the Python module, so this is hand-synced).
-4. `protocol/PROTOCOL.md` — the prose description and example payload.
+4. `android/app/src/main/java/dev/viewdock/android/protocol/Messages.kt` — the
+   Kotlin mirror (hand-synced too).
+5. `protocol/PROTOCOL.md` — the prose description and example payload.
 
 Then the code on both sides that sends or handles it, plus a
 [CHANGELOG.md](CHANGELOG.md) entry noting the protocol change, since it
@@ -122,6 +140,18 @@ want `python -m host.gui`.
 Regenerate the lock whenever you change `host/requirements.txt`; the
 command, and the one manual step after it, are in the lock file's own
 header comment. Dependabot will also open PRs against both files weekly.
+
+### Android
+
+- Gradle is pinned through the checked-in wrapper (`android/gradlew`,
+  `gradle/wrapper/gradle-wrapper.properties`), and every dependency version
+  lives in `android/gradle/libs.versions.toml`, so the same commit builds
+  with the same libraries. It needs JDK 17 or later and the Android SDK
+  (platform 37 — the newest Compose requires it to compile; the app itself
+  targets API 35).
+- The WebRTC dependency (`stream-webrtc-android`) is a prebuilt binary, like
+  the iPad's.
+- `android/local.properties` (your SDK path) and `build/` are gitignored.
 
 ### iPad
 

@@ -121,7 +121,21 @@ class X11DisplayServer(DisplayServer):
         primary = self._find_primary_output()
         if primary is not None and primary != output:
             enable_command += ["--right-of", primary]
-        subprocess.run(enable_command, check=True)
+        try:
+            subprocess.run(enable_command, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as error:
+            # Don't leave the half-added mode behind (the connector stays
+            # forced, but that is harmless and reused on the next start).
+            subprocess.run(["xrandr", "--delmode", output, mode_name], check=False)
+            subprocess.run(["xrandr", "--rmmode", mode_name], check=False)
+            raise RuntimeError(
+                f"xrandr could not enable {mode_name} on {output} "
+                f"({(error.stderr or '').strip() or 'no error text'}). A forced "
+                f"DisplayPort output often can't carry a high pixel clock (this mode "
+                f"is {modeline[0]} MHz): try a smaller size via "
+                "VIEWDOCK_DISPLAY_WIDTH/HEIGHT, or force an HDMI output instead "
+                "(host/scripts/force-connector.sh HDMI-A-1)."
+            ) from error
 
         self._output_name = output
         self._mode_name = mode_name

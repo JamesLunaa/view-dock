@@ -1,0 +1,12 @@
+# Normalize text files to LF in the repo, except where the format requires otherwise.
+* text=auto
+
+# Windows batch files must keep CRLF (Gradle generates android/gradlew.bat this way).
+*.bat text eol=crlf
+
+# Shell scripts must stay LF so they run on Linux/macOS.
+*.sh text eol=lf
+android/gradlew text eol=lf
+
+# Binary: don't touch line endings.
+*.jar binary

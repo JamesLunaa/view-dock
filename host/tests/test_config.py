@@ -8,7 +8,7 @@ import logging
 
 import pytest
 
-from host.config import DisplayConfig, HostConfig, _warn_on_aspect_mismatch
+from host.config import ANDROID_PRESETS, DisplayConfig, HostConfig, _warn_on_aspect_mismatch
 
 
 def test_no_warning_for_a_real_ipad_aspect(caplog):
@@ -48,3 +48,10 @@ def test_default_rejects_a_non_positive_display_scale(monkeypatch):
     monkeypatch.setenv("VIEWDOCK_DISPLAY_SCALE", "0")
     with pytest.raises(ValueError):
         HostConfig.default()
+
+
+def test_no_warning_for_android_presets(caplog):
+    with caplog.at_level("WARNING"):
+        for width, height in ANDROID_PRESETS.values():
+            _warn_on_aspect_mismatch(width, height)
+    assert not caplog.records
