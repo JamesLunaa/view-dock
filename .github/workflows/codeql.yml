@@ -1,12 +1,19 @@
 name: codeql
 
+# DISABLED while the repository is private: code scanning on a private repo needs
+# GitHub's paid code-security add-on, so automatic runs would just fail. It still
+# runs by hand ("Run workflow") if that add-on is ever available. To turn the
+# automatic runs back on (e.g. if the repo goes public again), replace the
+# `workflow_dispatch:` line below with the original triggers:
+#
+#   push:
+#     branches: [master, dev]
+#   pull_request:
+#   schedule:
+#     # Weekly, so newly published queries find old code too.
+#     - cron: "17 4 * * 1"
 on:
-  push:
-    branches: [master, dev]
-  pull_request:
-  schedule:
-    # Weekly, so newly published queries find old code too.
-    - cron: "17 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
