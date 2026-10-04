@@ -68,8 +68,15 @@ final class WifiSignaling: SignalingChannel {
 
 /// USB: the iPad must be the listener here (see `WebSocketServer.swift` for
 /// why) — the host connects through the `iproxy` tunnel as a client.
+///
+/// The same connection can carry either flow. The app announces itself with a
+/// `hello` the moment the host connects; a host that understands the wired
+/// stream answers with its own `hello` and the connection becomes the whole
+/// session, otherwise the first thing sent is a WebRTC SDP offer.
 final class UsbSignaling: SignalingChannel {
     private let server: WebSocketServer
+    /// A message already read to decide which flow this is.
+    private var pendingText: String?
 
     init(port: UInt16 = 8766) throws {
         server = try WebSocketServer(port: port)
@@ -82,8 +89,43 @@ final class UsbSignaling: SignalingChannel {
         try await server.acceptConnection(onWaiting: onWaiting)
     }
 
-    func receiveOffer() async throws -> SDPEnvelope {
+    /// Tells the host this build can take the wired stream. Must be sent right
+    /// after the connection opens: the host waits only about a second for it
+    /// before assuming an older, WebRTC-only build.
+    func announceWiredSupport() async throws {
+        let hello = HelloMessage(role: .ipad, protocolVersion: ProtocolVersion.current)
+        let data = try JSONEncoder().encode(hello)
+        try await server.sendText(String(decoding: data, as: UTF8.self))
+    }
+
+    /// Reads the host's first message and keeps it for the next read, so the
+    /// caller can decide what kind of session this is without consuming it.
+    func peekFirstText() async throws -> String {
         let text = try await server.receiveText()
+        pendingText = text
+        return text
+    }
+
+    func receiveMessage() async throws -> WebSocketMessage {
+        if let text = pendingText {
+            pendingText = nil
+            return .text(text)
+        }
+        return try await server.receiveMessage()
+    }
+
+    func sendText(_ text: String) async throws {
+        try await server.sendText(text)
+    }
+
+    func receiveOffer() async throws -> SDPEnvelope {
+        let text: String
+        if let pending = pendingText {
+            pendingText = nil
+            text = pending
+        } else {
+            text = try await server.receiveText()
+        }
         return try JSONDecoder().decode(SDPEnvelope.self, from: Data(text.utf8))
     }
 

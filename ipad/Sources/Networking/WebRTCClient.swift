@@ -75,7 +75,7 @@ final class WebRTCClient: NSObject, ObservableObject {
         case .bye:
             statusDescription = "Host disconnected"
             close()
-        case .inputEvent, .stats:
+        case .inputEvent, .stats, .keyframeRequest:
             break // Not expected inbound on this side.
         }
     }

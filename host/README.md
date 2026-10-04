@@ -26,10 +26,13 @@ events received back from the device.
   the iPad app listens on, so for USB the iPad must be the server, unlike
   Wi-Fi. `adb.py` is the Android equivalent of `usb.py`: same shape (the app
   listens, the host connects through the tunnel) but via `adb forward`.
-  Once connected, the iPad paths and Wi-Fi run the same WebRTC session logic
-  in `streaming/`; the Android USB path instead streams H.264 over the tunnel
-  itself (`streaming/wired_session.py`), since `adb forward` can't carry
-  WebRTC's UDP media — so it needs no Wi-Fi at all.
+  Once connected, Wi-Fi runs the WebRTC session logic in `streaming/`; a USB
+  tunnel instead streams H.264 through itself (`streaming/wired_session.py`),
+  since neither `adb forward` nor `iproxy` can carry WebRTC's UDP media — so
+  it needs no Wi-Fi at all. Android over `adb` is always wired; an iPad over
+  `iproxy` is wired when its app announces support with a `hello` right after
+  the tunnel connects (the host waits about a second, then falls back to
+  WebRTC for older app builds).
 - `input/` — injects `input_event` messages from the iPad into the X11 (or
   later Wayland) session via `uinput`.
 - `scripts/force-connector.sh` — forces a real GPU connector "connected" at
@@ -117,6 +120,12 @@ yet. Video is unaffected. See TODO/TODO.md.
 transports. Over Wi-Fi it uses the same WebRTC session as the iPad. Over USB
 it uses the wired stream (`streaming/wired_session.py`): H.264 + control
 messages straight through the `adb forward` tunnel, no Wi-Fi involved.
+
+**iPad wired stream** (verified 2026-10-04 on an iPad Air 11" M3): the host detects an
+updated app by its `hello` (see `transport/usb.py`) and streams H.264 through the `iproxy`
+tunnel, no Wi-Fi involved, at 60 fps by default. An iPad app build without it keeps working
+over WebRTC, as before. Unplugging and replugging mid-session reconnects. Not yet
+re-checked since it was added: Wi-Fi-only mode on the iPad, and the app in the background.
 
 Not yet done: adaptive bitrate from `stats` messages, mDNS discovery for
 Wi-Fi, Pencil pressure/hover, and Wayland support (phase 2).
@@ -305,12 +314,25 @@ encode time (avg/p95), RTT, loss, and the current target bitrate.
 | `VIEWDOCK_TARGET_FPS` | `30` | Stream frame rate |
 | `VIEWDOCK_KEYFRAME_INTERVAL` | `30.0` | Seconds between keyframes |
 | `VIEWDOCK_VIDEO_CODEC` | `h264` | `vp8` to offer VP8 first instead |
+| `VIEWDOCK_WIRED_FPS` | `60` | Frame rate of the USB (wired) stream. Separate from `VIEWDOCK_TARGET_FPS`, which is the WebRTC/Wi-Fi rate (default 30). Going past the display's refresh (`VIEWDOCK_DISPLAY_REFRESH_HZ`, default 60) gains nothing |
 | `VIEWDOCK_WIRED_BITRATE_MBPS` | `20.0` | Fixed bitrate of the Android USB stream (not adaptive; a cable has the bandwidth) |
 | `VIEWDOCK_WIRED_KEYFRAME_INTERVAL` | `10.0` | Seconds between keyframes on the Android USB stream (the phone can also ask for one) |
 
 The first four rows above (bitrate range, preset, FPS, keyframe interval) are
-WebRTC settings; the Android USB stream uses `VIEWDOCK_X264_PRESET` and
-`VIEWDOCK_TARGET_FPS` but has its own bitrate and keyframe settings.
+WebRTC settings; the USB (wired) stream uses `VIEWDOCK_X264_PRESET` but has its
+own frame rate, bitrate and keyframe settings. Every 5 s it logs
+`wired: fps=… bitrate=… capture=…ms convert=…ms encode=…ms`: if fps sits below
+the target, the stage with the largest time is the bottleneck. The stages run as
+a pipeline, so the achievable rate is about `1000 / (slowest stage in ms)` —
+but Python's global lock lets only some of the work overlap, so in practice the
+total of the three is what matters. On X11 the capture hands frames over in
+their native BGRA layout and the colour conversion reads them without copying
+(`capture_frame_bgra`); typical stage times at 1440x648 are then roughly
+capture 3 ms, convert 7 ms, encode 5 ms, comfortably inside the 16.7 ms a 60 fps
+frame allows. Display servers without that fast path (the Wayland fallbacks)
+use the slower RGB route.
+For Wi-Fi, `VIEWDOCK_TARGET_FPS=60` raises the WebRTC rate (more CPU and
+bandwidth; the adaptive bitrate still applies).
 
 ## Reconnecting after a drop
 

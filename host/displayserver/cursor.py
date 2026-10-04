@@ -35,11 +35,14 @@ class X11CursorCompositor:
     def close(self) -> None:
         self._display.close()
 
-    def composite(self, frame: np.ndarray, monitor: dict[str, int]) -> None:
+    def composite(self, frame: np.ndarray, monitor: dict[str, int], bgr: bool = False) -> None:
         """Draw the pointer into `frame` in place.
 
         `monitor` is the captured region in root coordinates — the same dict
-        shape `mss` takes, so the caller can pass what it already has.
+        shape `mss` takes, so the caller can pass what it already has. `frame`
+        is RGB (height, width, 3) by default; with `bgr=True` it holds BGR
+        channels first (BGRA frames included — only the first three channels
+        are touched, alpha is left alone).
         """
         cursor = self._display.xfixes_get_cursor_image(self._root)
 
@@ -55,11 +58,12 @@ class X11CursorCompositor:
 
         patch = self._decode(cursor)[y0 - top : y1 - top, x0 - left : x1 - left]
         alpha = patch[:, :, 3:4].astype(np.uint16)
-        target = frame[y0:y1, x0:x1].astype(np.uint16)
+        colors = patch[:, :, 2::-1] if bgr else patch[:, :, :3]
+        target = frame[y0:y1, x0:x1, :3].astype(np.uint16)
         # XFixes cursor pixels are premultiplied ARGB, so the source term is
         # already scaled by alpha — only the destination needs attenuating.
-        blended = patch[:, :, :3] + (target * (255 - alpha)) // 255
-        frame[y0:y1, x0:x1] = np.clip(blended, 0, 255).astype(np.uint8)
+        blended = colors + (target * (255 - alpha)) // 255
+        frame[y0:y1, x0:x1, :3] = np.clip(blended, 0, 255).astype(np.uint8)
 
     def _decode(self, cursor) -> np.ndarray:
         """Unpack the cursor's ARGB words into an RGBA array, memoized on the

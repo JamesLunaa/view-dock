@@ -19,6 +19,11 @@ TYPE_KEYFRAME_REQUEST = "keyframe_request"
 
 # Wired stream (see "Wired stream" in protocol/PROTOCOL.md): the first byte of
 # every binary frame says what it carries. Only video exists so far.
+# A client that can take the wired stream says so by sending `hello` with at
+# least this protocol_version as soon as the tunnel connects (see "Wired
+# stream" in protocol/PROTOCOL.md).
+WIRED_STREAM_MIN_VERSION = (1, 2)
+
 WIRED_FRAME_VIDEO = 0x01
 WIRED_FLAG_KEYFRAME = 0x01
 WIRED_VIDEO_HEADER_SIZE = 10  # type(1) + flags(1) + pts_us(8, big-endian)

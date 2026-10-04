@@ -13,6 +13,7 @@ enum MessageType: String, Codable {
     case inputEvent = "input_event"
     case stats
     case bye
+    case keyframeRequest = "keyframe_request"
 }
 
 enum Role: String, Codable {
@@ -100,6 +101,49 @@ struct ByeMessage: Codable {
     enum CodingKeys: String, CodingKey {
         case type, reason
     }
+}
+
+/// Asks the host to make its next video frame a keyframe. Only used on the wired
+/// stream, where decoding can only begin at one (WebRTC has PLI for this).
+struct KeyframeRequestMessage: Codable {
+    let type = MessageType.keyframeRequest
+
+    enum CodingKeys: String, CodingKey {
+        case type
+    }
+}
+
+/// Binary frames on a wired stream; layout in protocol/PROTOCOL.md ("Wired
+/// stream"): type(1) + flags(1) + pts in microseconds (8, big-endian) + one
+/// H.264 access unit in Annex-B form.
+enum WiredFrame {
+    static let video: UInt8 = 0x01
+    static let flagKeyframe: UInt8 = 0x01
+    static let videoHeaderSize = 10
+}
+
+struct VideoPacket {
+    let isKeyframe: Bool
+    let presentationTimeMicros: UInt64
+    let accessUnit: Data
+}
+
+/// Returns nil for anything that isn't a well-formed video frame, so unknown
+/// frame types are ignored rather than fatal.
+func parseVideoPacket(from frame: Data) -> VideoPacket? {
+    guard frame.count >= WiredFrame.videoHeaderSize, frame[frame.startIndex] == WiredFrame.video else {
+        return nil
+    }
+    let base = frame.startIndex
+    var pts: UInt64 = 0
+    for offset in 2..<10 {
+        pts = (pts << 8) | UInt64(frame[base + offset])
+    }
+    return VideoPacket(
+        isKeyframe: frame[base + 1] & WiredFrame.flagKeyframe != 0,
+        presentationTimeMicros: pts,
+        accessUnit: frame.subdata(in: (base + WiredFrame.videoHeaderSize)..<frame.endIndex)
+    )
 }
 
 /// Just enough to read `type` off an incoming control-channel message before

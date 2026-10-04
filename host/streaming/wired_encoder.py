@@ -14,6 +14,11 @@ from av.video.frame import PictureType
 
 from host.streaming import encoder_tuning
 
+# Frames per second of the wired stream. Independent of VIEWDOCK_TARGET_FPS (the
+# WebRTC setting, default 30): a cable has the bandwidth for more, and 60 matches
+# the virtual display's refresh rate. It costs CPU — the capture loop degrades
+# gracefully (drops frames, never bursts) if the machine can't keep up.
+WIRED_FPS = int(os.environ.get("VIEWDOCK_WIRED_FPS", "60"))
 WIRED_BITRATE = int(float(os.environ.get("VIEWDOCK_WIRED_BITRATE_MBPS", "20.0")) * 1_000_000)
 # Safety net only: over TCP nothing is lost, and each keyframe is a visible
 # blur-then-sharpen pulse on static text. Clients can also ask for one.
@@ -21,7 +26,7 @@ WIRED_KEYFRAME_INTERVAL_S = float(os.environ.get("VIEWDOCK_WIRED_KEYFRAME_INTERV
 
 
 class AnnexBEncoder:
-    def __init__(self, width: int, height: int, fps: int = encoder_tuning.FRAME_RATE) -> None:
+    def __init__(self, width: int, height: int, fps: int = WIRED_FPS) -> None:
         self._codec = av.CodecContext.create("libx264", "w")
         self._codec.width = width
         self._codec.height = height

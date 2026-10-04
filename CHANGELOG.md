@@ -2,18 +2,76 @@
 
 Notable changes to view-dock. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html) once releases
-start.
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Because `protocol/` is the contract between two separately installed pieces
-(the Arch host and the iPad app), entries that change it are called out
-explicitly — a host and an app from different releases are only guaranteed
-to interoperate if no protocol change sits between them.
+**How to read this file:** each `## [X.Y.Z] - date` heading is a release that has been
+tagged, newest first. `## [Unreleased]` at the top collects changes made since the latest
+release that haven't shipped yet; it is empty right after a release.
+
+Because `protocol/` is the contract between separately installed pieces (the Arch
+host and the iPad and Android apps), entries that change it are called out
+explicitly — a host and an app from different releases are only guaranteed to
+interoperate if no protocol change sits between them.
 
 ## [Unreleased]
 
-Nothing has been tagged yet; everything below is what currently lives on
-`master`, and will become the first release (`0.1.0`).
+## [2.0.0] - 2026-10-04
+
+The headline change is the iPad's wired USB stream. It is a **major** release because an
+updated iPad app is not compatible with an older host over USB — see the first entry
+under *Changed*. Update the host and the iPad app together.
+
+### Changed
+- **Breaking: update the host and the iPad app together.** Over USB, the updated iPad app
+  announces itself to the host with a `hello` as soon as the host connects. A host from
+  v1.0.4 or earlier doesn't expect that — it takes the `hello` for the SDP answer to its
+  WebRTC offer and the session fails. Wi-Fi is unaffected, and an *older* iPad app still
+  works with the new host (it keeps using WebRTC). The wire protocol's own version
+  (1.2) is unchanged; Android is unaffected.
+
+### Added
+- **iPad wired stream.** Verified on an iPad Air 11" (M3). The iPad app can now take the
+  same wired H.264 stream as Android over its USB cable, with no Wi-Fi: the
+  app announces support with a `hello`, the host (protocol 1.2+) detects it and
+  streams through the tunnel, and `AVSampleBufferDisplayLayer` decodes it. Older
+  iPad builds keep using WebRTC. The app's WebSocket server now handles binary
+  frames, pings and fragmented messages. Unit tests for the Swift protocol,
+  WebSocket framing and H.264 parsing run with `swift test` (macOS or Linux).
+  **Update the host and the iPad app together:** over USB, the updated app needs the
+  updated host.
+
+- App icons: the iPad app now has one (it had none), and the host icon is
+  redrawn, all derived from a single master (`branding/icon.svg`, the Android
+  icon's design) so the three platforms match. The host's tray icon, which used
+  to be a bare status dot, now shows that icon with a status badge.
+
+- The USB (wired) stream now runs at 60 fps by default (it was capped at 30 by the
+  WebRTC setting), via a capture → convert → encode pipeline, with a
+  `VIEWDOCK_WIRED_FPS` override and per-stage timings in the log. On X11 the
+  capture now skips the RGB reorder copy and the conversion reads the raw BGRA
+  buffer directly, cutting the per-frame cost roughly in half (measured: capture
+  ~6 → 2.4 ms, convert ~16 → 6.6 ms).
+
+### Fixed
+- The iPad app icon is now actually packaged into the app: `project.yml` listed the
+  asset catalog under a `resources:` key XcodeGen doesn't have and silently
+  ignores, so the app shipped with no icon. It is now under `sources`.
+
+### Known limitations
+- Touch moves the host's shared pointer rather than acting as a touchscreen
+  bound to the virtual display's region.
+- No Apple Pencil / stylus pressure or hover (the host injects position and
+  contact only).
+- Android apps are built from source (debug builds); the app is landscape-only
+  and tested on a single device.
+- iPad: not re-checked since the wired stream was added — Wi-Fi-only mode and the app
+  being in the background. (Unplugging and replugging the cable mid-session works.)
+- No Wi-Fi discovery — the host's IP is typed into the app by hand.
+- X11 only; no Wayland support on the host.
+- No authentication or pairing on either transport — see
+  [SECURITY.md](SECURITY.md).
+
+## [1.0.4] - 2026-10-04
 
 ### Added
 - **Android support.** Android client (`android/`, Kotlin + Jetpack Compose)
@@ -26,6 +84,71 @@ Nothing has been tagged yet; everything below is what currently lives on
   `hello.role` gains `android`; a wired stream (binary video frames on the
   signaling connection) and a `keyframe_request` message are added. A 1.0
   host drops messages it doesn't know, with a logged warning.
+
+### Fixed
+- The host no longer ends the whole session (and tears down the virtual
+  display) when a device closes the signaling connection mid-handshake; it
+  waits for the device to reconnect.
+- When `xrandr` can't enable the virtual display's mode (for example a pixel
+  clock too high for a forced DisplayPort output) the host now cleans up the
+  half-created mode and says what to try, instead of crashing with a bare
+  traceback.
+- Android display-size presets no longer trigger the "unusual aspect ratio"
+  warning meant for typos.
+
+### Documentation
+- iPad client guide, the list of supported iPad models, and a list of other Linux
+  distributions that should work but are untested.
+
+## [1.0.3] - 2026-10-02
+
+### Added
+- The host now forces a spare display connector on by itself when it starts, so
+  `force-connector.sh` no longer has to be run by hand after every boot. If the only
+  free outputs are disconnected it forces one on at the DRM level, using
+  passwordless `sudo` or a graphical `pkexec` prompt.
+  - It prefers high-numbered DisplayPort outputs over HDMI, so a real monitor on HDMI
+    works alongside the virtual display, and prefers already-connected free outputs
+    over disconnected ones (this fixed a black screen caused by picking an unforced
+    output).
+  - It warns when a real monitor is plugged into the port the virtual display is
+    using, since that would mirror it.
+  - An opt-in live handoff (`VIEWDOCK_AUTO_HANDOFF=1`) can move the virtual display to
+    another output. Experimental and untested against real hotplugs.
+  - The real-monitor check runs only on RandR layout changes, so it never adds a
+    periodic stall to frame capture.
+
+## [1.0.2] - 2026-10-02
+
+### Added
+- Streaming quality and responsiveness work for the WebRTC (Wi-Fi) stream:
+  - H.264 encoder tuning for desktop text (`streaming/encoder_tuning.py`) instead of
+    aiortc's webcam-oriented defaults.
+  - Adaptive bitrate driven by RTT and packet loss from the host's own RTCP reports
+    (`streaming/bitrate_controller.py`): it backs off quickly and probes upward slowly.
+  - A `pipeline:` log line every 5 s with fps, capture/convert/encode time, RTT, loss
+    and the current bitrate (`streaming/metrics.py`).
+  - Capture pacing that drops missed slots and resyncs, instead of aiortc's habit of
+    bursting back-to-back frames after a stall (a visible hitch plus added latency).
+  - `VIEWDOCK_*` environment variables to tune bitrate range, x264 preset, frame rate,
+    keyframe interval and codec; documented in `host/README.md`.
+
+## [1.0.1] - 2026-10-02
+
+### Fixed
+- A transient error while drawing the mouse cursor (seen: a one-off XFixes `BadAccess`
+  right after a display rearrangement) no longer disables the cursor overlay for the
+  rest of the session. It now gives up only after 120 consecutive failures
+  (about 2 s at 60 fps).
+
+### Documentation
+- Troubleshooting section in `host/README.md`.
+
+## [1.0.0] - 2026-10-01
+
+First release.
+
+### Added
 - Extended display over X11: a virtual monitor created via `xrandr`,
   captured with `mss`, with the cursor composited in separately via XFixes.
 - WebRTC streaming of that display to a native iPadOS app (SwiftUI + the
@@ -52,29 +175,10 @@ Nothing has been tagged yet; everything below is what currently lives on
 - Dependency and code scanning through GitHub (Dependabot updates, CodeQL,
   dependency review on pull requests).
 
-### Fixed
-- The host no longer ends the whole session (and tears down the virtual
-  display) when a device closes the signaling connection mid-handshake; it
-  waits for the device to reconnect.
-- When `xrandr` can't enable the virtual display's mode (for example a pixel
-  clock too high for a forced DisplayPort output) the host now cleans up the
-  half-created mode and says what to try, instead of crashing with a bare
-  traceback.
-- Android display-size presets no longer trigger the "unusual aspect ratio"
-  warning meant for typos.
-
-### Known limitations
-- Touch moves the host's shared pointer rather than acting as a touchscreen
-  bound to the virtual display's region.
-- No Apple Pencil / stylus pressure or hover (the host injects position and
-  contact only).
-- Android apps are built from source (debug builds); the app is landscape-only
-  and tested on a single device.
-- The iPad's USB connection carries only the handshake; its video goes over
-  Wi-Fi. Android's USB connection carries everything.
-- No Wi-Fi discovery — the host's IP is typed into the app by hand.
-- X11 only; no Wayland support on the host.
-- No authentication or pairing on either transport — see
-  [SECURITY.md](SECURITY.md).
-
-[Unreleased]: https://github.com/JamesLunaa/view-dock/commits/master
+[Unreleased]: https://github.com/JamesLunaa/view-dock/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/JamesLunaa/view-dock/compare/v1.0.4...v2.0.0
+[1.0.4]: https://github.com/JamesLunaa/view-dock/compare/v1.0.3...v1.0.4
+[1.0.3]: https://github.com/JamesLunaa/view-dock/compare/v1.0.2...v1.0.3
+[1.0.2]: https://github.com/JamesLunaa/view-dock/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/JamesLunaa/view-dock/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/JamesLunaa/view-dock/releases/tag/v1.0.0

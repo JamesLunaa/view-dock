@@ -20,17 +20,59 @@ from websockets.exceptions import ConnectionClosed
 from host.config import DisplayConfig
 from host.displayserver.base import DisplayServer
 from host.input.injector import InputInjector
-from host.streaming import encoder_tuning
-from host.streaming.wired_encoder import AnnexBEncoder
+from host.streaming.wired_encoder import WIRED_FPS, AnnexBEncoder
 from host.transport.base import Transport
 from protocol import messages, validation
 
 logger = logging.getLogger(__name__)
 
-_FRAME_PTIME = 1.0 / encoder_tuning.FRAME_RATE
+_FRAME_PTIME = 1.0 / WIRED_FPS
 _LOG_EVERY_S = 5.0
 
 _VIDEO_HEADER = struct.Struct(">BBQ")
+
+
+def _put_latest(queue: asyncio.Queue, item) -> None:
+    """Enqueue, dropping the stale item if the next stage hasn't taken it yet —
+    a late frame is worth less than the current one, and keeping at most one
+    waiting per stage bounds the latency the pipeline can add."""
+    if queue.full():
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+    queue.put_nowait(item)
+
+
+def _to_yuv(array, bgra: bool) -> VideoFrame:
+    """Colour-convert a captured frame to the encoder's yuv420p.
+
+    The BGRA path wraps the capture buffer without copying (`from_numpy_buffer`)
+    and converts from there, which is both cheaper than RGB24 -> yuv420p and
+    skips two copies. The RGB path keeps `from_ndarray`, which copies and so also
+    copes with the non-contiguous arrays the channel reorder produces.
+    """
+    if bgra:
+        return VideoFrame.from_numpy_buffer(array, format="bgra").reformat(format="yuv420p")
+    return VideoFrame.from_ndarray(array, format="rgb24").reformat(format="yuv420p")
+
+
+class _StageTimes:
+    """Per-stage averages for the periodic log line, to show which one limits fps."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.samples: dict[str, list[float]] = {"capture": [], "convert": [], "encode": []}
+
+    def add(self, stage: str, started: float) -> None:
+        self.samples[stage].append((time.perf_counter() - started) * 1000)
+
+    def summary(self) -> str:
+        return " ".join(
+            f"{stage}={sum(values) / len(values):.1f}ms" for stage, values in self.samples.items() if values
+        )
 
 
 def pack_video_frame(data: bytes, keyframe: bool, pts_us: int) -> bytes:
@@ -113,45 +155,78 @@ class WiredSession:
         await self._transport.send_message(json.dumps(message))
 
     async def _stream_video(self) -> None:
+        """Capture -> colour-convert -> encode+send, as three overlapping stages.
+
+        Done one after another a frame costs capture + convert + encode (about
+        24 ms at 1440x648), which caps out near 40 fps. As a pipeline each stage
+        works on a different frame at the same time, so throughput is set by the
+        slowest stage alone (the colour conversion, ~11 ms). The numpy/PyAV/x264
+        calls release the GIL, so the stages really run in parallel threads.
+        """
         assert self._transport is not None
         loop = asyncio.get_running_loop()
         encoder = AnnexBEncoder(self._display_config.capture_width, self._display_config.capture_height)
+        bgra = self._display_server.supports_bgra_capture
+        capture = self._display_server.capture_frame_bgra if bgra else self._display_server.capture_frame
+        raw_frames: asyncio.Queue = asyncio.Queue(maxsize=1)
+        ready_frames: asyncio.Queue = asyncio.Queue(maxsize=1)
+        times = _StageTimes()
         started = time.monotonic()
-        next_deadline = started
-        sent_bytes = frames = 0
-        last_log = started
 
-        while True:
-            now = time.monotonic()
-            if next_deadline - now < -_FRAME_PTIME:
-                # Fell behind (a slow capture, or the client not draining the
-                # tunnel fast enough): re-sync rather than burst to catch up,
-                # which would only add latency.
-                next_deadline = now
-            else:
-                await asyncio.sleep(max(next_deadline - now, 0))
-            next_deadline += _FRAME_PTIME
+        async def capture_stage() -> None:
+            next_deadline = time.monotonic()
+            while True:
+                now = time.monotonic()
+                if next_deadline - now < -_FRAME_PTIME:
+                    # Fell behind (a slow capture, or the client not draining the
+                    # tunnel fast enough): re-sync rather than burst to catch up,
+                    # which would only add latency.
+                    next_deadline = now
+                else:
+                    await asyncio.sleep(max(next_deadline - now, 0))
+                next_deadline += _FRAME_PTIME
+                began = time.perf_counter()
+                captured = await loop.run_in_executor(None, capture)
+                times.add("capture", began)
+                _put_latest(raw_frames, captured)
 
-            force = self._force_keyframe
-            self._force_keyframe = False
-            pts_us = int((time.monotonic() - started) * 1_000_000)
+        async def convert_stage() -> None:
+            while True:
+                captured = await raw_frames.get()
+                began = time.perf_counter()
+                frame = await loop.run_in_executor(None, _to_yuv, captured, bgra)
+                times.add("convert", began)
+                _put_latest(ready_frames, frame)
 
-            def capture_and_encode() -> list[tuple[bytes, bool]]:
-                frame = VideoFrame.from_ndarray(self._display_server.capture_frame(), format="rgb24")
-                return encoder.encode(frame, force_keyframe=force)
+        async def encode_stage() -> None:
+            assert self._transport is not None
+            sent_bytes = frames = 0
+            last_log = time.monotonic()
+            while True:
+                frame = await ready_frames.get()
+                force = self._force_keyframe
+                self._force_keyframe = False
+                pts_us = int((time.monotonic() - started) * 1_000_000)
 
-            for data, keyframe in await loop.run_in_executor(None, capture_and_encode):
-                await self._transport.send_message(pack_video_frame(data, keyframe, pts_us))
-                sent_bytes += len(data)
-            frames += 1
+                began = time.perf_counter()
+                packets = await loop.run_in_executor(None, encoder.encode, frame, force)
+                times.add("encode", began)
+                for data, keyframe in packets:
+                    await self._transport.send_message(pack_video_frame(data, keyframe, pts_us))
+                    sent_bytes += len(data)
+                frames += 1
 
-            if time.monotonic() - last_log >= _LOG_EVERY_S:
-                elapsed = time.monotonic() - last_log
-                logger.info(
-                    "wired: fps=%.1f bitrate=%.1fMbps", frames / elapsed, sent_bytes * 8 / elapsed / 1e6
-                )
-                last_log = time.monotonic()
-                sent_bytes = frames = 0
+                if time.monotonic() - last_log >= _LOG_EVERY_S:
+                    elapsed = time.monotonic() - last_log
+                    logger.info(
+                        "wired: fps=%.1f bitrate=%.1fMbps %s",
+                        frames / elapsed, sent_bytes * 8 / elapsed / 1e6, times.summary(),
+                    )
+                    last_log = time.monotonic()
+                    sent_bytes = frames = 0
+                    times.reset()
+
+        await asyncio.gather(capture_stage(), convert_stage(), encode_stage())
 
     async def _receive_control(self) -> None:
         assert self._transport is not None

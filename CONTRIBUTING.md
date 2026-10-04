@@ -75,7 +75,15 @@ mapping) that need no device:
 cd android && ./gradlew testDebugUnitTest
 ```
 
-CI runs the host suite only; the Android tests are run by hand for now. There
+The iPad app's Foundation-only logic (protocol messages, WebSocket framing,
+H.264 Annex-B parsing) has unit tests that run without Xcode or a device, on
+macOS or Linux:
+
+```sh
+cd ipad && swift test
+```
+
+CI runs the host suite only; the Android and Swift tests are run by hand for now. There
 is no automated test for the video path on a real decoder — that needs a
 device.
 
@@ -102,6 +110,8 @@ message means touching all five of:
 2. `protocol/messages.py` — the shared constants.
 3. `ipad/Sources/Protocol/Messages.swift` — the Swift mirror of those
    constants (Swift can't import the Python module, so this is hand-synced).
+   Its tests (`ipad/Tests/`) check the JSON shapes against what the host's
+   schemas allow.
 4. `android/app/src/main/java/dev/viewdock/android/protocol/Messages.kt` — the
    Kotlin mirror (hand-synced too).
 5. `protocol/PROTOCOL.md` — the prose description and example payload.
@@ -109,6 +119,20 @@ message means touching all five of:
 Then the code on both sides that sends or handles it, plus a
 [CHANGELOG.md](CHANGELOG.md) entry noting the protocol change, since it
 affects whether a given host and app version interoperate.
+
+## App icons
+
+One master, `branding/icon.svg`, drives the host, iPad and Android icons so
+they stay consistent. Edit it (it's plain SVG, three elements by id) and run:
+
+```sh
+python branding/generate_icons.py   # needs PySide6, like the host GUI
+```
+
+That rewrites `host/gui/assets/icon.png`, the iPad's
+`Assets.xcassets/AppIcon.appiconset` and Android's launcher drawable and
+background colour — commit the results with the master. A host test fails if
+they get out of step.
 
 ## Code style
 
@@ -190,11 +214,20 @@ Releases are cut from `master` by the maintainer:
 1. Move the `## [Unreleased]` entries into a new `## [X.Y.Z] - YYYY-MM-DD`
    section in `CHANGELOG.md`, leaving `Unreleased` empty, and update the
    link definitions at the bottom.
-2. Tag the commit: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
-3. Publish a GitHub release from that tag, using the changelog section as
+2. Bump the version strings to match: `versionName` and `versionCode` in
+   `android/app/build.gradle.kts` (`versionCode` = major*10000 + minor*100 +
+   patch), and `MARKETING_VERSION` in `ipad/project.yml`. A host test
+   (`host/tests/test_versions.py`) fails if they disagree with the changelog.
+3. Merge to `master`, then tag that commit: `git tag -a vX.Y.Z -m "vX.Y.Z" &&
+   git push origin vX.Y.Z`. Never move or delete a tag once pushed.
+4. Publish a GitHub release from that tag, using the changelog section as
    its notes.
 
 Versions follow semver, with the protocol in mind: since the host and the
-iPad app are installed separately, a release containing a breaking
-`protocol/` change is the kind that needs a major (or, pre-1.0, minor)
-bump and a note that both sides must be updated together.
+iPad and Android apps are installed separately, a release containing a
+breaking `protocol/` change is the kind that needs a major bump and a note
+that both sides must be updated together. A new feature that every older
+peer simply ignores is a minor bump. One that an older peer can't tolerate —
+say, a newer iPad app against an older host over USB — is an incompatible
+pairing, which counts as breaking (major) even though the wire protocol's own
+version number didn't change.

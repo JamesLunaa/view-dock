@@ -106,10 +106,23 @@ exchange carries the whole session:
   The stream is baseline-profile H.264 with no B-frames, so decode order is
   display order.
 
-Which flow a connection uses is decided by the host's first message: an SDP
-envelope (`{"sdp": ..., "type": "offer"}`) starts a WebRTC session, a `hello`
-starts a wired session. The host sends `hello` and `display_info` first, and
-the first video frame is always a keyframe.
+Which flow a connection uses is decided at connect time:
+
+- **Android over `adb`:** always wired. The app is the listener and the host
+  speaks first.
+- **iPad over `usbmuxd`/`iproxy`:** the host can't tell which build of the app
+  is listening, so a build that supports the wired stream announces itself by
+  sending `hello` (role `ipad`, `protocol_version` 1.2 or later) the moment the
+  tunnel connects. The host waits about a second for it: a `hello` means wired,
+  silence means an older WebRTC-only build, and the host proceeds with the SDP
+  offer as before. (An app that announces itself to a host older than 1.2 will
+  confuse that host — keep the two in step.)
+- **Wi-Fi:** always WebRTC.
+
+For a wired session the host then sends its own `hello` and `display_info`
+first, and the first video frame is always a keyframe. The client decides on
+its side by the host's first message: a `hello` is wired, an SDP envelope
+(`{"sdp": ..., "type": "offer"}`) is WebRTC.
 
 ## Versioning
 

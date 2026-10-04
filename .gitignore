@@ -10,4 +10,6 @@ __pycache__/
 ipad/*.xcodeproj/
 ipad/DerivedData/
 ipad/xcuserdata/
+ipad/.build/
+ipad/.swiftpm/
 *.xcuserstate
