@@ -2,13 +2,7 @@ name: dependency-review
 
 # Flags dependencies added in a pull request that have known vulnerabilities
 # or a license problem, before they're merged.
-#
-# DISABLED while the repository is private: this check needs GitHub's paid
-# code-security add-on on private repos, so it would fail on every pull request.
-# To turn it back on (e.g. if the repo goes public again), replace the
-# `workflow_dispatch:` line below with `pull_request:`.
-on:
-  workflow_dispatch:
+on: pull_request
 
 permissions:
   contents: read

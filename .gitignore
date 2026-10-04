@@ -13,14 +13,3 @@ ipad/xcuserdata/
 ipad/.build/
 ipad/.swiftpm/
 *.xcuserstate
-
-# Secrets: never commit signing keys, certificates or credentials.
-*.jks
-*.keystore
-keystore.properties
-key.properties
-*.p12
-*.pem
-*.mobileprovision
-.env
-.env.*
