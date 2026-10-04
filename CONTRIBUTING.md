@@ -214,11 +214,20 @@ Releases are cut from `master` by the maintainer:
 1. Move the `## [Unreleased]` entries into a new `## [X.Y.Z] - YYYY-MM-DD`
    section in `CHANGELOG.md`, leaving `Unreleased` empty, and update the
    link definitions at the bottom.
-2. Tag the commit: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
-3. Publish a GitHub release from that tag, using the changelog section as
+2. Bump the version strings to match: `versionName` and `versionCode` in
+   `android/app/build.gradle.kts` (`versionCode` = major*10000 + minor*100 +
+   patch), and `MARKETING_VERSION` in `ipad/project.yml`. A host test
+   (`host/tests/test_versions.py`) fails if they disagree with the changelog.
+3. Merge to `master`, then tag that commit: `git tag -a vX.Y.Z -m "vX.Y.Z" &&
+   git push origin vX.Y.Z`. Never move or delete a tag once pushed.
+4. Publish a GitHub release from that tag, using the changelog section as
    its notes.
 
 Versions follow semver, with the protocol in mind: since the host and the
-iPad app are installed separately, a release containing a breaking
-`protocol/` change is the kind that needs a major (or, pre-1.0, minor)
-bump and a note that both sides must be updated together.
+iPad and Android apps are installed separately, a release containing a
+breaking `protocol/` change is the kind that needs a major bump and a note
+that both sides must be updated together. A new feature that every older
+peer simply ignores is a minor bump. One that an older peer can't tolerate —
+say, a newer iPad app against an older host over USB — is an incompatible
+pairing, which counts as breaking (major) even though the wire protocol's own
+version number didn't change.

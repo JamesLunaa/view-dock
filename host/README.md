@@ -121,10 +121,11 @@ transports. Over Wi-Fi it uses the same WebRTC session as the iPad. Over USB
 it uses the wired stream (`streaming/wired_session.py`): H.264 + control
 messages straight through the `adb forward` tunnel, no Wi-Fi involved.
 
-**iPad wired stream:** the host side is implemented and tested (it detects an
-updated app by its `hello`, see `transport/usb.py`), and the iPad app has the
-receiving side, but the pair has **not yet been run on an iPad**. An iPad app
-build without it keeps working over WebRTC, as before.
+**iPad wired stream** (verified 2026-10-04 on an iPad Air 11" M3): the host detects an
+updated app by its `hello` (see `transport/usb.py`) and streams H.264 through the `iproxy`
+tunnel, no Wi-Fi involved, at 60 fps by default. An iPad app build without it keeps working
+over WebRTC, as before. Unplugging and replugging mid-session reconnects. Not yet
+re-checked since it was added: Wi-Fi-only mode on the iPad, and the app in the background.
 
 Not yet done: adaptive bitrate from `stats` messages, mDNS discovery for
 Wi-Fi, Pencil pressure/hover, and Wayland support (phase 2).

@@ -21,7 +21,7 @@ restarted.
 device so far — see [Compatibility](#compatibility). Over USB it needs no
 Wi-Fi at all: video and input travel through the cable itself, so it also
 works on a network where devices can't reach each other. The iPad app has the
-same wired stream implemented, but it is untested on hardware.
+same wired stream, verified on an iPad Air 11" (M3).
 
 **Known limitations**, tracked for future work:
 - Touch input is forwarded and injected, but moves the host's *shared*
@@ -36,10 +36,10 @@ same wired stream implemented, but it is untested on hardware.
   background the picture pauses, and it is meant to resume (via a fresh
   keyframe) when you return, but that hasn't been tested. Android apps are
   built from source; there is no Play Store or prebuilt release yet.
-- The iPad's wired USB stream (video through the cable, no Wi-Fi) is new and
-  has **not yet been run on a real iPad**. Until you've built the updated app
-  and confirmed it, assume the iPad still needs a shared Wi-Fi network for
-  video. (Android's USB connection carries everything and is verified.)
+- iPad: the wired USB stream is verified, including unplugging and replugging the
+  cable, but two things haven't been re-checked since it was added — Wi-Fi-only mode
+  and the app being sent to the background. An iPad app built before the
+  wired stream still works over USB, but keeps sending its video over Wi-Fi.
 - Neither transport authenticates the device to the host — see
   [Security](#security) before running this on a network you don't control.
 
@@ -50,12 +50,12 @@ worth being explicit about what that currently does and doesn't protect.
 [SECURITY.md](SECURITY.md) has the full model and the reporting process;
 the short version:
 
-**Encrypted: yes on every network path.** Over Wi-Fi (and for the iPad),
+**Encrypted: yes on every network path.** Over Wi-Fi (iPad and Android),
 video and the control data channel ride a standard WebRTC session — SRTP for
 media, DTLS-keyed SCTP for data. That is mandatory in WebRTC and there is no
 plaintext fallback, so nobody passively sniffing your network can read your
-screen off the wire. The exception is the **wired USB stream** (Android, and
-the iPad once its updated app is in use): it isn't WebRTC and isn't encrypted.
+screen off the wire. The exception is the **wired USB stream** (Android, and the
+iPad with the current app): it isn't WebRTC and isn't encrypted.
 It travels inside the USB cable through a tunnel, never over Wi-Fi. On Android
 the listener is bound to the phone's loopback address only; the iPad's
 listener is not yet restricted that way — see [SECURITY.md](SECURITY.md).
@@ -88,7 +88,7 @@ likely fine but haven't been confirmed.
 | | Tested configuration | Notes |
 |---|---|---|
 | **Host** | Arch Linux, KDE Plasma, **Xorg** (X11) session | The virtual-display approach relies on forcing a GPU connector "on" at the kernel/DRM level so KDE's `kscreen` treats it as a real monitor — see `host/README.md`'s "Real GPU output on an Xorg desktop" for why, and why Wayland doesn't work the same way yet. Other X11 window managers/desktop environments likely work for the core display pipeline, but the kscreen-specific connector-forcing step is KDE-specific and untested elsewhere. |
-| **iPad** | iPad Air 11" (M3), iPadOS 26.6 | The Xcode project's deployment target is iOS 17.0, so earlier iPadOS versions and other iPad models should work in principle, but only this specific device/OS combination has actually been run. |
+| **iPad** | iPad Air 11" (M3), iPadOS 26.6 | Wi-Fi and the USB wired stream (video through the cable, 60 fps) both verified on this device. The Xcode project's deployment target is iOS 17.0, so earlier iPadOS versions and other iPad models should work in principle, but only this specific device/OS combination has actually been run. |
 | **Android** | vivo Y28 (V2352), Funtouch OS 15 (Android 15), phone — USB and Wi-Fi both verified | `minSdk` is 26 (Android 8.0), so other versions and devices, including tablets, should work in principle, but only this device has actually been run. The host's "Android tablet" size preset is a guess, untested. |
 | **Mac** (to build the iPad app only) | Any recent Xcode with the iOS 17 SDK | No specific Xcode version is pinned; building requires [XcodeGen](https://github.com/yonaskolb/XcodeGen) and a free or paid Apple Developer account to code-sign onto a physical device (the iPad app hasn't been run in the Simulator — WebRTC/video needs real hardware). |
 

@@ -18,6 +18,10 @@ xcodegen generate
 open ViewDock.xcodeproj
 ```
 
+Re-run `xcodegen generate` after pulling changes: new source files and the app icon only
+reach the project when it is regenerated. (If the icon doesn't update on the iPad, delete the
+app before reinstalling — iOS can keep showing the old one.)
+
 This resolves the WebRTC Swift package dependency and produces a normal
 Xcode project you can build and run on a physical iPad (WebRTC and camera/
 screen APIs generally don't work in the Simulator for this kind of app).
@@ -33,6 +37,8 @@ screen APIs generally don't work in the Simulator for this kind of app).
   `AVSampleBufferDisplayLayer`), `H264SampleBufferFactory` (Annex-B →
   `CMSampleBuffer`), `WiredVideoView`, plus the Foundation-only
   `WebSocketFraming` and `H264AnnexB` that those build on.
+- `Package.swift` + `Tests/` — a SwiftPM package that exists only to unit-test the
+  Foundation-only logic with `swift test` (see Tests below); it is not how the app is built.
 - `Resources/Assets.xcassets` — the app icon, generated from
   `branding/icon.svg` (see `CONTRIBUTING.md`); don't edit the PNG by hand.
 - `Sources/Protocol/Messages.swift` — Swift mirror of
@@ -55,18 +61,31 @@ signaling server (`WifiSignaling`); for USB the iPad is the listener
 `iproxy` on the host relays through to a port only the device can be listening
 on — see `host/transport/usb.py`.
 
-**Wired stream over USB (new):** implemented and unit-tested, but **not yet
-run on a real iPad** — treat the first build as untested. With it, the USB
-cable carries the video and input itself, so the iPad works with no shared
-Wi-Fi (previously the cable carried only the handshake and the video still
-took Wi-Fi). On connect the app sends a `hello` announcing support; a host
-at protocol 1.2 or later answers and streams H.264 through the tunnel, which
-`AVSampleBufferDisplayLayer` decodes in hardware. Against an older host the
-app is not compatible over USB (keep host and app at the same version); an
-older *app* against a newer host simply keeps using WebRTC. What was tested
-without an iPad is listed under "Tests" below; everything that touches
-AVFoundation, CoreMedia, Network or SwiftUI could only be syntax-checked on
-Linux and is the part to watch on the first build.
+**Wired stream over USB:** working — verified on an iPad Air 11" (M3), at 60 fps with the
+host's default settings. The USB cable now carries the video and input itself, so the
+stream doesn't use Wi-Fi at all (before, the cable carried only the handshake and the video
+still took Wi-Fi). How it works: on connect the app sends a `hello` announcing support; a
+host at protocol 1.2 or later answers and streams H.264 through the tunnel, which
+`AVSampleBufferDisplayLayer` decodes in hardware. Against an older host the app is not
+compatible over USB (keep host and app at the same version); an older *app* against a newer
+host simply keeps using WebRTC.
+
+What changed in the app for it:
+- `Networking/WiredClient.swift` reads the tunnel and feeds an `AVSampleBufferDisplayLayer`;
+  `H264SampleBufferFactory` turns the host's Annex-B access units into `CMSampleBuffer`s;
+  `WiredVideoView` hosts the layer in SwiftUI.
+- `WebSocketServer.swift` now understands binary frames, pings and fragmented messages (it
+  used to accept text frames only), with the framing logic split out into
+  `WebSocketFraming.swift` so it can be unit-tested.
+- `Protocol/Messages.swift` gained the `keyframe_request` message, the wired video-frame
+  header and protocol version 1.2.
+- In the wired view the video is sized to the host display's aspect ratio, so a touch inside
+  it maps 1:1 onto the host display. (The Wi-Fi/WebRTC view still maps touches to the whole
+  screen, which only matters when the stream's shape differs from the iPad's.)
+- The app now has an icon (`Resources/Assets.xcassets`, generated from `branding/icon.svg`).
+
+**Verified:** unplugging and replugging the cable mid-session reconnects. **Not yet re-checked
+since the wired stream was added:** Wi-Fi-only mode and the app being sent to the background.
 
 Not yet done: Wi-Fi discovery (host IP is typed in manually — no mDNS yet) and
 Pencil-specific input (pressure/hover; only plain touch is forwarded today).

@@ -17,8 +17,9 @@ will be acknowledged and triaged rather than ignored.
 
 ## Supported versions
 
-Pre-1.0, with no released versions yet. Only the current `master` is
-supported; fixes land there rather than being backported.
+Releases are tagged `vX.Y.Z` (see [CHANGELOG.md](CHANGELOG.md)). Only the latest
+release and the current `master` are supported; fixes land on `master` and ship
+in the next release rather than being backported to older ones.
 
 ## Security model
 
@@ -33,13 +34,14 @@ local network. There is no authentication of any kind.**
   DTLS handshake. This is not optional and there is no plaintext fallback —
   it comes from WebRTC itself (`aiortc` on the host, Google's WebRTC
   framework on the iPad and Android). A passive observer on the LAN cannot
-  read your screen contents off the wire. This covers Wi-Fi sessions and the
-  iPad.
+  read your screen contents off the wire. This covers every Wi-Fi session, on the
+  iPad and on Android.
 - **A wired USB stream is not WebRTC, and is not encrypted — but never touches
-  the network** (this is Android over USB today, and the iPad once its
-  updated app is in use; see the iPad listener note below). Android's wired stream (`host/streaming/wired_session.py`,
-  protocol "Wired stream") is plain H.264 and JSON on a WebSocket that
-  `adb forward` carries over the USB cable. The app's listener
+  the network** (Android over USB, and the iPad over USB with the current
+  app; see the iPad listener note below). The wired stream
+  (`host/streaming/wired_session.py`, protocol "Wired stream") is plain H.264 and
+  JSON on a WebSocket that the USB tunnel (`adb forward` for Android, `iproxy` for
+  the iPad) carries over the cable. Android's app listener
   (`UsbSignaling` in `android/`) binds `127.0.0.1` only, so unlike the iPad's
   (below) it cannot be reached from the Wi-Fi network. What a USB session
   does rely on is the physical cable and the phone's USB debugging

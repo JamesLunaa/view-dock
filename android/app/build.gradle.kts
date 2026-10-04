@@ -11,8 +11,11 @@ android {
         applicationId = "dev.viewdock.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // versionName tracks the repo release (see CHANGELOG.md). versionCode must only
+        // ever increase for an update to install over an older build; major*10000 +
+        // minor*100 + patch keeps it in step with versionName (2.0.0 -> 20000).
+        versionCode = 20000
+        versionName = "2.0.0"
     }
 
     buildTypes {
