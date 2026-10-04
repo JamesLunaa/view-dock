@@ -4,7 +4,7 @@ import Foundation
 /// See `protocol/PROTOCOL.md` for the full message contract. Keep in sync
 /// by hand with the Python side when the protocol changes.
 enum ProtocolVersion {
-    static let current = "1.0"
+    static let current = "1.2"
 }
 
 enum MessageType: String, Codable {
@@ -18,6 +18,7 @@ enum MessageType: String, Codable {
 enum Role: String, Codable {
     case host
     case ipad
+    case android
 }
 
 enum InputKind: String, Codable {

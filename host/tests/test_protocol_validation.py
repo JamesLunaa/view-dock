@@ -16,6 +16,7 @@ ALL_TYPES = [
     messages.TYPE_INPUT_EVENT,
     messages.TYPE_STATS,
     messages.TYPE_BYE,
+    messages.TYPE_KEYFRAME_REQUEST,
 ]
 
 VALID_MESSAGES = {
@@ -49,6 +50,7 @@ VALID_MESSAGES = {
         "type": messages.TYPE_BYE,
         "reason": messages.BYE_REASON_USER_DISCONNECTED,
     },
+    messages.TYPE_KEYFRAME_REQUEST: {"type": messages.TYPE_KEYFRAME_REQUEST},
 }
 
 
@@ -104,3 +106,10 @@ def test_unknown_message_type_raises():
 def test_missing_type_raises():
     with pytest.raises(validation.UnknownMessageType):
         validation.validate_message({"width": 100})
+
+
+@pytest.mark.parametrize("role", [messages.ROLE_HOST, messages.ROLE_IPAD, messages.ROLE_ANDROID])
+def test_hello_accepts_every_client_role(role):
+    validation.validate_message(
+        {"type": messages.TYPE_HELLO, "role": role, "protocol_version": messages.PROTOCOL_VERSION}
+    )

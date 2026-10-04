@@ -17,6 +17,8 @@ _MAX_TABLET_ASPECT = 1.7
 
 
 def _warn_on_aspect_mismatch(width: int, height: int) -> None:
+    if (width, height) in ANDROID_PRESETS.values():
+        return  # a deliberate phone/tablet preset, not a typo
     aspect = width / height
     if not (_MIN_TABLET_ASPECT <= aspect <= _MAX_TABLET_ASPECT):
         logger.warning(
@@ -81,6 +83,20 @@ IPAD_PRESETS: dict[str, tuple[int, int]] = {
     "iPad Pro 13\" (M4)": (1376, 1032),
     "iPad (10th/11th gen)": (1180, 820),
     "iPad mini (6th/A17 Pro)": (1133, 744),
+}
+
+
+# Android devices have no fixed model list the way iPads do, so these are
+# generic landscape sizes by form factor rather than per-model entries. A phone
+# is far wider than the tablet band `_warn_on_aspect_mismatch` expects (~20:9),
+# which is why these are exempt from that warning. For an exact fit use
+# VIEWDOCK_DISPLAY_WIDTH/HEIGHT with the device's landscape size.
+ANDROID_PRESETS: dict[str, tuple[int, int]] = {
+    # Deliberately modest: ~64 MHz pixel clock at reduced blanking. A forced
+    # DisplayPort output was seen failing `xrandr --mode` at 78 MHz (1600x720)
+    # but accepting 71 MHz, so keep headroom.
+    "Android phone (20:9)": (1440, 648),
+    "Android tablet (16:10)": (1280, 800),
 }
 
 

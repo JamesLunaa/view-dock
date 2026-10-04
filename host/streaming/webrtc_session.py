@@ -28,6 +28,9 @@ from protocol import messages, validation
 
 logger = logging.getLogger(__name__)
 
+_LOOP_LAG_TICK_S = 0.1
+_LOOP_LAG_WARN_S = 0.3
+
 # aioice's own defaults (5s between ICE consent-freshness checks, 6
 # consecutive failures before giving up — RFC 7675) add up to ~30s before an
 # unplugged cable or killed app surfaces as connectionState "failed" and
@@ -135,6 +138,8 @@ class WebRtcSession:
         )
         self._ipad_stats: tuple[float, NetworkSample] | None = None
         self._monitor_task: asyncio.Task | None = None
+        self._loop_lag_task: asyncio.Task | None = None
+        self._seen_input = False
 
     async def start(self, transport: Transport) -> None:
         encoder_tuning.install()
@@ -150,6 +155,7 @@ class WebRtcSession:
 
         await self._negotiate(transport)
         self._monitor_task = asyncio.ensure_future(self._monitor_stream())
+        self._loop_lag_task = asyncio.ensure_future(self._watch_loop_lag())
 
     async def wait_closed(self) -> None:
         await self._closed.wait()
@@ -159,8 +165,25 @@ class WebRtcSession:
             return
         if self._monitor_task is not None:
             self._monitor_task.cancel()
+        if self._loop_lag_task is not None:
+            self._loop_lag_task.cancel()
         await self._pc.close()
         self._closed.set()
+
+    async def _watch_loop_lag(self) -> None:
+        """Warns when the event loop was blocked for a noticeable time.
+
+        ICE consent checks and the media itself run on this loop, so a stall of
+        a couple of seconds looks to both ends exactly like a dead network
+        (`Consent to send expired`). Logging stalls makes "the host froze" and
+        "the link dropped" distinguishable from the log alone.
+        """
+        while True:
+            started = time.monotonic()
+            await asyncio.sleep(_LOOP_LAG_TICK_S)
+            lag = time.monotonic() - started - _LOOP_LAG_TICK_S
+            if lag > _LOOP_LAG_WARN_S:
+                logger.warning("Event loop stalled for %.0f ms", lag * 1000)
 
     async def _monitor_stream(self) -> None:
         """Once a second: sample the network, adapt bitrate; every few
@@ -286,6 +309,9 @@ class WebRtcSession:
 
         message_type = message["type"]
         if message_type == messages.TYPE_INPUT_EVENT:
+            if not self._seen_input:
+                self._seen_input = True
+                logger.info("First input event received (%s)", message["kind"])
             self._input_injector.handle_input_event(message)
         elif message_type == messages.TYPE_STATS:
             self._ipad_stats = (

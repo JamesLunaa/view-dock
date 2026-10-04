@@ -1,8 +1,9 @@
 # host
 
 Python server that runs on the Arch Linux machine. Creates a virtual display,
-captures and encodes it, streams it to the iPad over WebRTC, and injects input
-events received back from the iPad.
+captures and encodes it, streams it to the iPad or an Android device (WebRTC,
+or a plain H.264 stream over the Android USB tunnel), and injects input
+events received back from the device.
 
 ## Layout
 
@@ -23,8 +24,12 @@ events received back from the iPad.
   `libimobiledevice`) to open a usbmuxd TCP tunnel and connects through it as
   a WebSocket *client* — `iproxy` owns the local port and relays to a port
   the iPad app listens on, so for USB the iPad must be the server, unlike
-  Wi-Fi. Once connected, the same WebRTC session logic in `streaming/` runs
-  over either.
+  Wi-Fi. `adb.py` is the Android equivalent of `usb.py`: same shape (the app
+  listens, the host connects through the tunnel) but via `adb forward`.
+  Once connected, the iPad paths and Wi-Fi run the same WebRTC session logic
+  in `streaming/`; the Android USB path instead streams H.264 over the tunnel
+  itself (`streaming/wired_session.py`), since `adb forward` can't carry
+  WebRTC's UDP media — so it needs no Wi-Fi at all.
 - `input/` — injects `input_event` messages from the iPad into the X11 (or
   later Wayland) session via `uinput`.
 - `scripts/force-connector.sh` — forces a real GPU connector "connected" at
@@ -85,6 +90,9 @@ events received back from the iPad.
     the old one — on KDE this includes `konsole` (via `kio-extras`' device
     support) and likely other apps that touch `libplist`. Fix:
     `sudo ln -s /usr/lib/libplist-2.0.so.12 /usr/lib/libplist-2.0.so.4`.
+- For Android over USB: `android-tools` (provides `adb`) on the host, and
+  USB debugging enabled on the device. The host then uses `adb forward`
+  instead of `iproxy` (`transport/adb.py`). Wi-Fi needs neither.
 - Python 3.11+, deps in `requirements.txt`.
 
 ## Status
@@ -104,6 +112,11 @@ track + `control` data channel with schema-validated
 moves the *shared* X pointer rather than acting as a touchscreen bound to
 the virtual display's region, so it isn't usable as direct touch control
 yet. Video is unaffected. See TODO/TODO.md.
+
+**Android** (verified 2026-10-04 on a vivo Y28, Android 15): works over both
+transports. Over Wi-Fi it uses the same WebRTC session as the iPad. Over USB
+it uses the wired stream (`streaming/wired_session.py`): H.264 + control
+messages straight through the `adb forward` tunnel, no Wi-Fi involved.
 
 Not yet done: adaptive bitrate from `stats` messages, mDNS discovery for
 Wi-Fi, Pencil pressure/hover, and Wayland support (phase 2).
@@ -177,6 +190,16 @@ iPad upscales 2x and everything lands correctly.
 `cvt` rounds widths to a multiple of 8, so 1180 becomes 1184 — `x11.py`
 patches this back to the exact requested width internally, so the stream's
 aspect ratio always matches the configured size exactly.
+
+### Android sizing
+
+Android devices have no fixed model list, so the presets are generic landscape
+sizes: **Android phone (20:9) = 1440x648** (tested on a vivo Y28) and **Android
+tablet (16:10) = 1280x800** (untested). For an exact fit, set
+`VIEWDOCK_DISPLAY_WIDTH`/`HEIGHT` to the device's landscape size — but keep it
+modest: a forced spare output has a pixel-clock ceiling (see Troubleshooting),
+and a phone's native resolution is usually larger than useful on a desktop
+anyway. The app is landscape-only.
 
 ### Optional: sharper native-pixel capture (`VIEWDOCK_DISPLAY_SCALE`)
 
@@ -282,6 +305,12 @@ encode time (avg/p95), RTT, loss, and the current target bitrate.
 | `VIEWDOCK_TARGET_FPS` | `30` | Stream frame rate |
 | `VIEWDOCK_KEYFRAME_INTERVAL` | `30.0` | Seconds between keyframes |
 | `VIEWDOCK_VIDEO_CODEC` | `h264` | `vp8` to offer VP8 first instead |
+| `VIEWDOCK_WIRED_BITRATE_MBPS` | `20.0` | Fixed bitrate of the Android USB stream (not adaptive; a cable has the bandwidth) |
+| `VIEWDOCK_WIRED_KEYFRAME_INTERVAL` | `10.0` | Seconds between keyframes on the Android USB stream (the phone can also ask for one) |
+
+The first four rows above (bitrate range, preset, FPS, keyframe interval) are
+WebRTC settings; the Android USB stream uses `VIEWDOCK_X264_PRESET` and
+`VIEWDOCK_TARGET_FPS` but has its own bitrate and keyframe settings.
 
 ## Reconnecting after a drop
 
@@ -388,6 +417,29 @@ WebRTC connection itself is still technically alive.
      available bandwidth with your other active displays may be lower
      still, worth testing a lower `VIEWDOCK_DISPLAY_WIDTH`/`HEIGHT` or
      `VIEWDOCK_DISPLAY_REFRESH_HZ`.
+
+- **"No spare output" / no outputs other than the built-in screen listed by
+  `xrandr`.** Check `echo $XDG_SESSION_TYPE`: on a **Wayland** session
+  `xrandr` only sees XWayland and none of the real connectors, so the host
+  can't create the display (forcing a connector won't help). Log out and
+  pick the **Plasma (X11)** session at the login screen.
+- **`xrandr ... Configure crtc N failed` when enabling the display.** The
+  mode's pixel clock is too high for the output. A forced **DisplayPort**
+  output with nothing plugged in has a lower ceiling than HDMI — seen live
+  on a DP output: 71 MHz worked, 78 MHz (1600x720) failed. Use a smaller
+  size (the Android phone preset is 1440x648 for this reason) or force an
+  HDMI output instead (`./host/scripts/force-connector.sh HDMI-A-1`). The host
+  now reports this with a message instead of a traceback and cleans up the
+  half-created mode.
+- **Android: host stays on "waiting for device".** `adb devices` must list the
+  phone as `device` — `unauthorized` means the "Allow USB debugging?" prompt
+  on the phone hasn't been accepted, and no device at all usually means the
+  cable is charge-only or USB debugging is off. Then open the app; it listens
+  for the host.
+- **Android over Wi-Fi never connects.** The phone must be able to reach the
+  host's port 8765. Test with a TCP connect from the phone; some routers
+  isolate Wi-Fi clients from each other ("AP/client isolation"), in which
+  case use USB instead.
 
 ## Tests
 

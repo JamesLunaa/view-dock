@@ -16,6 +16,16 @@ Nothing has been tagged yet; everything below is what currently lives on
 `master`, and will become the first release (`0.1.0`).
 
 ### Added
+- **Android support.** Android client (`android/`, Kotlin + Jetpack Compose)
+  for phones and tablets, with touch and stylus input, over Wi-Fi or USB.
+  Verified on a vivo Y28 (Android 15) over both transports. On the host,
+  `transport/adb.py` tunnels USB via `adb forward` and is auto-detected
+  alongside the iPad's usbmuxd transport. Over USB the Android client gets
+  its video directly through the cable (a wired H.264 stream), so it works
+  with no shared Wi-Fi. **Protocol changes (1.1, 1.2; both additive):**
+  `hello.role` gains `android`; a wired stream (binary video frames on the
+  signaling connection) and a `keyframe_request` message are added. A 1.0
+  host drops messages it doesn't know, with a logged warning.
 - Extended display over X11: a virtual monitor created via `xrandr`,
   captured with `mss`, with the cursor composited in separately via XFixes.
 - WebRTC streaming of that display to a native iPadOS app (SwiftUI + the
@@ -42,10 +52,26 @@ Nothing has been tagged yet; everything below is what currently lives on
 - Dependency and code scanning through GitHub (Dependabot updates, CodeQL,
   dependency review on pull requests).
 
+### Fixed
+- The host no longer ends the whole session (and tears down the virtual
+  display) when a device closes the signaling connection mid-handshake; it
+  waits for the device to reconnect.
+- When `xrandr` can't enable the virtual display's mode (for example a pixel
+  clock too high for a forced DisplayPort output) the host now cleans up the
+  half-created mode and says what to try, instead of crashing with a bare
+  traceback.
+- Android display-size presets no longer trigger the "unusual aspect ratio"
+  warning meant for typos.
+
 ### Known limitations
 - Touch moves the host's shared pointer rather than acting as a touchscreen
   bound to the virtual display's region.
-- No Apple Pencil pressure or hover.
+- No Apple Pencil / stylus pressure or hover (the host injects position and
+  contact only).
+- Android apps are built from source (debug builds); the app is landscape-only
+  and tested on a single device.
+- The iPad's USB connection carries only the handshake; its video goes over
+  Wi-Fi. Android's USB connection carries everything.
 - No Wi-Fi discovery — the host's IP is typed into the app by hand.
 - X11 only; no Wayland support on the host.
 - No authentication or pairing on either transport — see

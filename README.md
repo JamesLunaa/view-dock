@@ -1,28 +1,43 @@
 # view-dock
 
-view-dock turns an iPad into a real secondary display for an Arch Linux
-machine — not a mirror, an actual extended desktop you can drag windows onto
-— over Wi-Fi (same network) or a wired USB cable. A Python host app on Arch
-creates a virtual display, captures and streams it over WebRTC; a native
-iPadOS app renders the stream full-screen and forwards touch/Pencil input
-back to the host.
+view-dock turns an iPad or an Android phone/tablet into a real secondary
+display for an Arch Linux machine — not a mirror, an actual extended desktop
+you can drag windows onto — over Wi-Fi (same network) or a wired USB cable. A
+Python host app on Arch creates a virtual display, captures and streams it; a
+native iPadOS app or Android app renders the stream full-screen and forwards
+touch (and Apple Pencil / stylus) input back to the host. Both apps speak the
+same protocol.
 
 ## Status
 
 Working end-to-end as a real extended display: windows drag from the
-built-in screen onto the iPad and render there live, with the mouse cursor
-visible, at correct UI scale. Both Wi-Fi and USB work, with USB preferred
-automatically when a cable is plugged in, and the session now reconnects on
-its own after a dropped connection instead of needing to be restarted.
+built-in screen onto the iPad or Android device and render there live, with
+the mouse cursor visible, at correct UI scale. Both Wi-Fi and USB work, with
+USB preferred automatically when a cable is plugged in, and the session
+reconnects on its own after a dropped connection instead of needing to be
+restarted.
+
+**Android is supported** (phones and tablets, Android 8.0+), tested on one
+device so far — see [Compatibility](#compatibility). Over USB it needs no
+Wi-Fi at all: video and input travel through the cable itself, so it also
+works on a network where devices can't reach each other.
 
 **Known limitations**, tracked for future work:
 - Touch input is forwarded and injected, but moves the host's *shared*
   pointer rather than acting as a touchscreen bound to the virtual display's
   region.
-- No Apple Pencil pressure/hover — plain touch only.
+- No Apple Pencil / stylus pressure or hover — the host injects position and
+  contact only (the Android app does send stylus pressure; the host ignores
+  it for now).
 - No Wi-Fi discovery yet (the host's IP is typed into the app by hand).
 - Wayland is not supported on the host yet (X11 only).
-- Neither transport authenticates the iPad to the host — see
+- Android: landscape only. Keep the app in the foreground — while it is in the
+  background the picture pauses, and it is meant to resume (via a fresh
+  keyframe) when you return, but that hasn't been tested. Android apps are
+  built from source; there is no Play Store or prebuilt release yet.
+- The iPad's USB connection carries only the connection handshake; its video
+  still travels over Wi-Fi. (Android's USB connection carries everything.)
+- Neither transport authenticates the device to the host — see
   [Security](#security) before running this on a network you don't control.
 
 ## Security
@@ -32,10 +47,14 @@ worth being explicit about what that currently does and doesn't protect.
 [SECURITY.md](SECURITY.md) has the full model and the reporting process;
 the short version:
 
-**Encrypted: yes, always.** Video and the control data channel both ride a
-standard WebRTC session — SRTP for media, DTLS-keyed SCTP for data. That is
-mandatory in WebRTC and there is no plaintext fallback, so nobody passively
-sniffing your network can read your screen off the wire.
+**Encrypted: yes on every network path.** Over Wi-Fi (and for the iPad),
+video and the control data channel ride a standard WebRTC session — SRTP for
+media, DTLS-keyed SCTP for data. That is mandatory in WebRTC and there is no
+plaintext fallback, so nobody passively sniffing your network can read your
+screen off the wire. The one exception is **Android over USB**: that stream
+isn't WebRTC and isn't encrypted, but it never touches the network — it
+travels inside the USB cable through an `adb` tunnel to a listener bound to
+the phone's loopback address only.
 
 **Authenticated: no, not at all.** There is no pairing step, no token, and
 no password. The signaling handshake that sets the session up is plain
@@ -49,8 +68,9 @@ validated before it's acted on.) Because the DTLS fingerprints are exchanged
 over that same unauthenticated channel, encryption also doesn't stop an
 attacker who can actively rewrite signaling traffic.
 
-In practice: run it on a network you trust, prefer the USB cable, and
-firewall port 8765 if you're somewhere you'd rather not assume that.
+In practice: run it on a network you trust, prefer the USB cable (for
+Android that means no network exposure at all), and firewall port 8765 if
+you're somewhere you'd rather not assume that.
 Authentication is a known gap and is tracked in SECURITY.md, not a disputed
 report.
 
@@ -65,7 +85,8 @@ likely fine but haven't been confirmed.
 |---|---|---|
 | **Host** | Arch Linux, KDE Plasma, **Xorg** (X11) session | The virtual-display approach relies on forcing a GPU connector "on" at the kernel/DRM level so KDE's `kscreen` treats it as a real monitor — see `host/README.md`'s "Real GPU output on an Xorg desktop" for why, and why Wayland doesn't work the same way yet. Other X11 window managers/desktop environments likely work for the core display pipeline, but the kscreen-specific connector-forcing step is KDE-specific and untested elsewhere. |
 | **iPad** | iPad Air 11" (M3), iPadOS 26.6 | The Xcode project's deployment target is iOS 17.0, so earlier iPadOS versions and other iPad models should work in principle, but only this specific device/OS combination has actually been run. |
-| **Mac** (to build the iPad app) | Any recent Xcode with the iOS 17 SDK | No specific Xcode version is pinned; building requires [XcodeGen](https://github.com/yonaskolb/XcodeGen) and a free or paid Apple Developer account to code-sign onto a physical device (the iPad app hasn't been run in the Simulator — WebRTC/video needs real hardware). |
+| **Android** | vivo Y28 (V2352), Funtouch OS 15 (Android 15), phone — USB and Wi-Fi both verified | `minSdk` is 26 (Android 8.0), so other versions and devices, including tablets, should work in principle, but only this device has actually been run. The host's "Android tablet" size preset is a guess, untested. |
+| **Mac** (to build the iPad app only) | Any recent Xcode with the iOS 17 SDK | No specific Xcode version is pinned; building requires [XcodeGen](https://github.com/yonaskolb/XcodeGen) and a free or paid Apple Developer account to code-sign onto a physical device (the iPad app hasn't been run in the Simulator — WebRTC/video needs real hardware). |
 
 ## Requirements
 
@@ -78,6 +99,8 @@ likely fine but haven't been confirmed.
   builds — see `host/README.md`'s Requirements section for why the official
   Arch packages don't work with recent iPadOS, and a known side effect of
   installing the `-git` ones.
+- For Android over USB: `android-tools` (provides `adb`), and USB debugging
+  enabled on the device. Not needed for Wi-Fi.
 - The `uinput` kernel module loaded (`sudo modprobe uinput`) for touch/Pencil
   input injection — this does not persist across reboots.
 - Optional: PySide6 (`pip install PySide6`), only needed for the tray
@@ -100,6 +123,20 @@ likely fine but haven't been confirmed.
   Lightning and USB-C iPads work for the wired transport.
 - The view-dock app installed via Xcode (see Installation below) — it isn't
   distributed through the App Store.
+
+**Android:**
+- Android 8.0 (API 26) or later, phone or tablet. Tested on Android 15 (see
+  Compatibility above).
+- For USB: *Settings → Developer options → USB debugging* switched on, and
+  the "Allow USB debugging?" prompt accepted for your computer. For Wi-Fi:
+  the device and the host on the same network, with a router that lets
+  devices talk to each other (some guest networks and "AP isolation" modes
+  don't).
+- The app installed by sideloading (see Installation below) — it isn't
+  distributed through the Play Store.
+
+**Building the Android app** (any machine; no Mac needed): JDK 17 or later and
+the Android SDK (platform 37 and build-tools). See `android/README.md`.
 
 **Mac, to build the iPad app:**
 - Xcode, with [XcodeGen](https://github.com/yonaskolb/XcodeGen) installed
@@ -157,6 +194,8 @@ Things to keep in mind on any distro:
   unaffected.
 - **The connector-forcing step is untested outside KDE Plasma.** Other desktops
   may or may not need it.
+- For Android USB, install `adb` (Debian/Ubuntu: `adb`; Fedora/openSUSE:
+  `android-tools`) — also untested there.
 - Python 3.11+ and the `uinput` setup above apply everywhere.
 
 Then follow `host/README.md`'s "Real GPU output on an Xorg desktop" section
@@ -216,10 +255,25 @@ In Xcode:
    launch will ask you to trust the developer certificate on the iPad
    (Settings → General → VPN & Device Management).
 
-### 4. First connection
+### 4. Android app setup (optional, instead of or alongside the iPad)
+
+Any machine with a JDK and the Android SDK can build it — see
+`android/README.md` for the one-time setup:
+
+```sh
+cd view-dock/android
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+(Or copy `app-debug.apk` to the device and open it; you'll need to allow
+installs from that source.) There's no signing key or developer account
+involved for a debug build.
+
+### 5. First connection
 
 With the host's virtual display set up (step 1) and the app installed on
-your iPad (step 3):
+your iPad (step 3) or Android device (step 4):
 
 1. On the host, launch it one of three ways (see `host/README.md`'s
    "Running it" for the full picture):
@@ -228,10 +282,13 @@ your iPad (step 3):
    - **Terminal UI**: `python -m host.ui` — no extra dependency, works over
      SSH.
    - **Raw CLI**: `python -m host.main` — for scripting/debugging.
-2. Open the view-dock app on the iPad. Plug it in by cable for USB (lower
-   latency, auto-preferred when connected), or enter the host's IP address
-   in the app for Wi-Fi.
-3. It should connect within a few seconds. Drag a window from your main
+2. Pick a display size that matches the device — the host's GUI/TUI list has
+   presets for iPads and for an Android phone (20:9) or tablet (16:10); see
+   `host/README.md`'s "Sizing" section.
+3. Open the view-dock app. Plug the device in by cable for USB (lower
+   latency, auto-preferred when connected; on Android, USB debugging must be
+   on), or enter the host's IP address in the app for Wi-Fi.
+4. It should connect within a few seconds. Drag a window from your main
    screen onto the new extended-display area to confirm it's working.
 
 If something doesn't connect, `host/README.md`'s Troubleshooting section
@@ -241,12 +298,15 @@ virtual display mode, the DRM connector step needing a re-run after reboot).
 ## Project layout
 
 - `host/` — the Python server: virtual display creation, capture, WebRTC
-  streaming, input injection, and three ways to run it (GUI, terminal UI,
+  and wired streaming, input injection, and three ways to run it (GUI, terminal UI,
   CLI). See `host/README.md` for full detail.
 - `ipad/` — the native iPadOS app (SwiftUI + WebRTC). See `ipad/README.md`.
-- `protocol/` — the wire protocol shared by both sides: handshake, display
-  metadata, input events. See `protocol/PROTOCOL.md`. Changes here are
-  cross-cutting — both `host/` and `ipad/` need updating together.
+- `android/` — the native Android app (Kotlin + Jetpack Compose). See
+  `android/README.md`.
+- `protocol/` — the wire protocol shared by all sides: handshake, display
+  metadata, input events, and the wired stream used over Android USB. See
+  `protocol/PROTOCOL.md`. Changes here are cross-cutting — `host/`, `ipad/`
+  and `android/` all need updating together.
 
 ## Contributing
 
