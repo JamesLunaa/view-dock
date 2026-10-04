@@ -134,6 +134,31 @@ ranges — the same one CI installs — use
 `pip install --require-hashes -r host/requirements.lock.txt`. See
 [CONTRIBUTING.md](CONTRIBUTING.md#reproducible-builds).)
 
+#### Other distros (untested)
+
+Only Arch has been verified on real hardware. Nothing in the host code is
+Arch-specific, so other distros should work if they provide the same
+prerequisites — these are the equivalent packages, but none of the rows below
+have been run:
+
+| Distro | Packages |
+|---|---|
+| Manjaro / EndeavourOS / CachyOS | Same as Arch above. |
+| Debian / Ubuntu / Mint / Pop!_OS | `sudo apt install xserver-xorg-video-dummy x11-xserver-utils ffmpeg usbmuxd libimobiledevice-utils` |
+| Fedora | `sudo dnf install xorg-x11-drv-dummy xrandr ffmpeg usbmuxd libimobiledevice-utils` (full codec support may need RPM Fusion) |
+| openSUSE | `sudo zypper install xf86-video-dummy xrandr ffmpeg usbmuxd libimobiledevice-tools` |
+
+Things to keep in mind on any distro:
+
+- **Log in to an X11/Xorg session.** Wayland isn't supported yet, and several
+  distros (Ubuntu, Fedora) now default to it.
+- **Packaged `libimobiledevice` may be too old** to pair with iOS 17+/iPadOS 26+
+  (see `host/README.md`); USB may need a newer build from source. Wi-Fi is
+  unaffected.
+- **The connector-forcing step is untested outside KDE Plasma.** Other desktops
+  may or may not need it.
+- Python 3.11+ and the `uinput` setup above apply everywhere.
+
 Then follow `host/README.md`'s "Real GPU output on an Xorg desktop" section
 once, to set up the virtual display's connector — it's the one step that
 can't be fully automated (it writes to a kernel debugfs file under `sudo`),
