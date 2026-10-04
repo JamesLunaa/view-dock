@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Forces a spare GPU connector "connected" at the DRM level, in-process.
 
 Python counterpart of `host/scripts/force-connector.sh`, so starting the host

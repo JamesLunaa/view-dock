@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 # Starts a second, isolated X server (display :1) running the dummy driver,
 # for view-dock's virtual display — separate from your normal desktop
 # session (:0), which is left completely untouched.

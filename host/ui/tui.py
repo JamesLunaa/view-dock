@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Terminal UI for the host: start/stop and live connection state without
 re-typing `force-connector.sh` + env vars + `python -m host.main` + watching
 a scrolling log + remembering Ctrl+C-not-kill every session.

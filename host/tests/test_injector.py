@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Covers InputInjector's pixel mapping under VIEWDOCK_DISPLAY_SCALE: uinput's
 absolute coordinate range, and every emitted x/y, must match the actual X11
 screen pixel geometry (DisplayConfig.capture_width/capture_height) — not the

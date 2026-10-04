@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Common interface for establishing the socket/channel that WebRTC
 signaling rides over, regardless of whether it's Wi-Fi or a USB tunnel.
 """

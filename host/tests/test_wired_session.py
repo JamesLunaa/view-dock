@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Covers the wired (USB) stream: the encoder emits a self-contained Annex-B
 stream a phone decoder can start from, and `WiredSession` puts the right
 messages on the tunnel — hello/display_info first, a keyframe first, keyframes

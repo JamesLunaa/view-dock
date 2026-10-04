@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Composites the X11 pointer into captured frames.
 
 `mss` (XGetImage underneath) returns framebuffer contents only — the pointer

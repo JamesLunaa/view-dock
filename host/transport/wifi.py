@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Wi-Fi transport: direct socket connection to the iPad over the LAN.
 
 Runs a WebSocket server that the iPad connects to for WebRTC signaling (SDP

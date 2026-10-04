@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 from host.streaming.bitrate_controller import BitrateController, NetworkSample
 
 MIN, MAX = 1_000_000, 10_000_000

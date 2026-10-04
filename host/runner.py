@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Observable host session lifecycle, shared by the CLI entrypoint
 (`main.py`) and any UI (`host/ui/`) that wants to show connection state
 instead of a scrolling log.

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Keeps the app icons consistent: `branding/icon.svg` is the single source, and
 `branding/generate_icons.py` derives the host, iPad and Android icons from it.
 These checks fail if someone edits the master (or a generated file) without

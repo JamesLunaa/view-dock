@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Shared message-type constants for the view-dock wire protocol.
 
 Mirrors protocol/PROTOCOL.md and protocol/schema/*.json. Imported by the

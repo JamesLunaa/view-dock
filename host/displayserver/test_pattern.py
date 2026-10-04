@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Synthetic animated frame source — no real capture at all.
 
 Useful for validating the encode/transport/decode/render pipeline

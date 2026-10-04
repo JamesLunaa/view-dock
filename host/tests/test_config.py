@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Covers the aspect-ratio sanity check for VIEWDOCK_DISPLAY_WIDTH/HEIGHT —
 a swapped or mistyped size otherwise letterboxes silently on the iPad with
 nothing in the log to explain it — and VIEWDOCK_DISPLAY_SCALE's opt-in

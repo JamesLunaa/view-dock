@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 James Luna
+
 package dev.viewdock.android.protocol
 
 import org.json.JSONObject

@@ -134,6 +134,30 @@ That rewrites `host/gui/assets/icon.png`, the iPad's
 background colour — commit the results with the master. A host test fails if
 they get out of step.
 
+## Licensing and credit
+
+view-dock is licensed under the **GPL-3.0-or-later** (see [LICENSE](LICENSE) and
+[NOTICE](NOTICE)); the copyright holder is James Luna.
+
+**Every source file starts with a two-line notice** (`SPDX-License-Identifier:
+GPL-3.0-or-later` and the copyright line). After adding a file, run
+`python scripts/add_license_headers.py` — a host test fails if one is missing. Never
+remove or change these notices, or the credit in `NOTICE` and the README, when editing.
+
+**By submitting a contribution** (a pull request or patch) you agree that:
+- it is licensed under the GPL-3.0-or-later like the rest of the project, and you keep
+  your own copyright in it;
+- you also grant the maintainer the right to distribute it under other terms, in
+  particular to publish built apps in the Apple App Store and Google Play, whose terms
+  can't be combined with the GPL. (Without this the maintainer couldn't ship an app that
+  contains your code, so contributions can't be accepted without it.);
+- you wrote it, or have the right to submit it. Signing your commits off
+  (`git commit -s`, the Developer Certificate of Origin) is the way to say so.
+
+New third-party libraries must be compatible with the GPL-3.0-or-later (permissive
+licenses and LGPL are; GPL-2.0-only and anything "non-commercial" are not) and must be
+added to [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Code style
 
 There's no formatter or linter enforced in CI. Match the surrounding code:

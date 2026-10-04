@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 # Installs an application-menu launcher for the host GUI — "an app icon
 # where we can launch this without doing the CLI stuff". Templates
 # gui/viewdock-host.desktop.in with this checkout's absolute path (the

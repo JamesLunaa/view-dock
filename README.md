@@ -8,6 +8,9 @@ native iPadOS app or Android app renders the stream full-screen and forwards
 touch (and Apple Pencil / stylus) input back to the host. Both apps speak the
 same protocol.
 
+Created by James Luna. Free software under the GPL-3.0-or-later — see
+[License](#license).
+
 ## Status
 
 Working end-to-end as a real extended display: windows drag from the
@@ -321,4 +324,11 @@ issue tracker. Notable changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-[MIT](LICENSE)
+Copyright (C) 2026 **James Luna**. view-dock is free software, licensed under the
+[GNU General Public License v3.0 or later](LICENSE) (GPL-3.0-or-later): you may use,
+study, share and modify it, but if you distribute it — or a modified version, including
+a built app — you must keep the copyright notice, give the recipients the source, and
+license your version under the GPL too. See [NOTICE](NOTICE) for the details, including
+the note that versions v1.0.0–v1.0.4 were released under the MIT License, and the
+request not to reuse the name or icon for a modified version. Third-party libraries and
+their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

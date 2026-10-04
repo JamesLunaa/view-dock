@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Notices when the X screen layout changes underneath a running capture.
 
 The captured region is a rectangle in root coordinates, resolved once when

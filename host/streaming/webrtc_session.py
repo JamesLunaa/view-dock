@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """WebRTC session: video track sourced from a DisplayServer capture, plus
 the `control` data channel carrying protocol/ messages. Reused unchanged
 regardless of whether the underlying connection came from `transport/wifi.py`

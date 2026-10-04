@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """X11 implementation of DisplayServer.
 
 Virtual output is created via `xrandr` (dummy output / `--addmode`); frames

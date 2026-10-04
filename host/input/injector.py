@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Injects `input_event` messages from the iPad into the Linux input stack
 via `uinput`, translating normalized [0,1] coordinates to real pixels on the
 virtual display.

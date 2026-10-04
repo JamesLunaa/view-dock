@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Covers the Android USB path: `AdbTransport` reuses `UsbTransport`'s
 connect/retry logic but must build an `adb forward` tunnel, only treat a
 device in the `device` state as usable, and be picked up by the runner's

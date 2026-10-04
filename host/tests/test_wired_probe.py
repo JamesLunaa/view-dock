@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Covers how the host tells a wired-capable iPad app from an older WebRTC-only
 one: over `iproxy` nothing identifies the build, so a new app sends `hello`
 the moment the tunnel connects and an old one stays silent. Uses a real local
