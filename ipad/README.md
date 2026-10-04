@@ -90,6 +90,17 @@ since the wired stream was added:** Wi-Fi-only mode and the app being sent to th
 Not yet done: Wi-Fi discovery (host IP is typed in manually — no mDNS yet) and
 Pencil-specific input (pressure/hover; only plain touch is forwarded today).
 
+## About and Licenses
+
+The connect screen has an **info (ⓘ)** button (top right) that opens an About sheet: the
+app's version and copyright (James Luna), the GPL notices, the full GNU GPL v3 text, the
+licenses of the libraries inside the app, and a link to the source code
+(`Sources/Legal/`). The texts are bundled from `Resources/Legal/` — a folder reference in
+`project.yml` — and are **generated**: edit `legal/components.json` and run
+`python scripts/generate_legal.py`, don't change them by hand. The Foundation-only parts
+(`AppInfo.swift`) are unit-tested; the SwiftUI screens (`AboutView.swift`) have not yet been
+run on a device.
+
 ## Tests
 
 The Foundation-only logic — protocol messages, WebSocket framing and H.264

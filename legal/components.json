@@ -1,0 +1,86 @@
+{
+  "_comment": "Third-party software shipped INSIDE the apps, and where its license text lives (legal/licenses/). `python scripts/generate_legal.py` turns this into the notices screens bundled in the Android and iPad apps. Add a row here whenever an app gains or drops a library. Host (Python) dependencies are only listed in THIRD_PARTY_NOTICES.md since the host isn't shipped as a bundled binary.",
+  "components": [
+    {
+      "name": "AndroidX and Jetpack Compose libraries",
+      "by": "Google / The Android Open Source Project",
+      "url": "https://developer.android.com/jetpack",
+      "license": "Apache License 2.0",
+      "text": "Apache-2.0.txt",
+      "platforms": ["android"]
+    },
+    {
+      "name": "Kotlin standard library, kotlinx.coroutines and kotlinx.serialization",
+      "by": "JetBrains s.r.o. and contributors",
+      "url": "https://kotlinlang.org",
+      "license": "Apache License 2.0",
+      "text": "Apache-2.0.txt",
+      "platforms": ["android"]
+    },
+    {
+      "name": "JetBrains Annotations",
+      "by": "JetBrains s.r.o.",
+      "url": "https://github.com/JetBrains/java-annotations",
+      "license": "Apache License 2.0",
+      "text": "Apache-2.0.txt",
+      "platforms": ["android"]
+    },
+    {
+      "name": "JSpecify",
+      "by": "The JSpecify authors",
+      "url": "https://jspecify.dev",
+      "license": "Apache License 2.0",
+      "text": "Apache-2.0.txt",
+      "platforms": ["android"]
+    },
+    {
+      "name": "Guava ListenableFuture",
+      "by": "Google",
+      "url": "https://github.com/google/guava",
+      "license": "Apache License 2.0",
+      "text": "Apache-2.0.txt",
+      "platforms": ["android"]
+    },
+    {
+      "name": "stream-webrtc-android",
+      "by": "Stream.io, Inc.",
+      "url": "https://github.com/GetStream/webrtc-android",
+      "license": "Apache License 2.0",
+      "text": "Apache-2.0.txt",
+      "platforms": ["android"]
+    },
+    {
+      "name": "Java-WebSocket",
+      "by": "Nathan Rajlich and contributors",
+      "url": "https://github.com/TooTallNate/Java-WebSocket",
+      "license": "MIT License",
+      "text": "Java-WebSocket-MIT.txt",
+      "platforms": ["android"]
+    },
+    {
+      "name": "SLF4J API",
+      "by": "QOS.ch",
+      "url": "https://www.slf4j.org",
+      "license": "MIT License",
+      "text": "SLF4J-MIT.txt",
+      "platforms": ["android"]
+    },
+    {
+      "name": "WebRTC",
+      "by": "The WebRTC project authors (Google)",
+      "url": "https://webrtc.org",
+      "license": "BSD 3-Clause License",
+      "text": "WebRTC-BSD-3-Clause.txt",
+      "note": "WebRTC itself contains further open-source components (for example BoringSSL, libvpx, libyuv, Opus and abseil-cpp), each under its own permissive license; they are part of the WebRTC source distribution.",
+      "platforms": ["android", "ipad"]
+    },
+    {
+      "name": "WebRTC framework binaries (stasel/WebRTC)",
+      "by": "Stasel and contributors",
+      "url": "https://github.com/stasel/WebRTC",
+      "license": "BSD 3-Clause License",
+      "text": "stasel-WebRTC-BSD-3-Clause.txt",
+      "platforms": ["ipad"]
+    }
+  ]
+}

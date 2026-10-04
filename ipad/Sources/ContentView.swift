@@ -6,6 +6,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var connectionManager = ConnectionManager()
     @State private var hostAddress = ""
+    @State private var showingAbout = false
 
     var body: some View {
         ZStack {
@@ -32,6 +33,23 @@ struct ContentView: View {
                     .disabled(hostAddress.isEmpty)
                 }
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            // Only while no session is running: during one the screen is the host's display.
+            if connectionManager.wiredClient == nil, connectionManager.webRTCClient == nil {
+                Button {
+                    showingAbout = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                        .padding()
+                }
+                .accessibilityLabel("About")
+            }
+        }
+        .sheet(isPresented: $showingAbout) {
+            AboutView()
         }
         .onAppear {
             connectionManager.start()
