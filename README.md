@@ -85,7 +85,19 @@ likely fine but haven't been confirmed.
   beyond the core Python dependencies.
 
 **iPad:**
-- iPadOS 17.0 or later (tested on iPadOS 26.6).
+- iPadOS 17.0 or later (tested on iPadOS 26.6). The app is iPad-only (no
+  iPhone) and supports any iPad that can run iPadOS 17, i.e.:
+  - iPad (6th generation, 2018) and newer
+  - iPad mini (5th generation) and newer
+  - iPad Air (3rd generation) and newer
+  - iPad Pro 10.5", 11" (all generations) and 12.9" (2nd generation) and newer
+
+  Older models (iPad 5th gen and earlier, iPad mini 4 and earlier, iPad Air 2
+  and earlier, the first-generation iPad Pro) can't run iPadOS 17 and are not
+  supported. Only the iPad Air 11" (M3) has actually been tested; other
+  supported models should work but are unconfirmed, and older chips (A10/A11)
+  may struggle with high-resolution, high-refresh-rate streams. Both
+  Lightning and USB-C iPads work for the wired transport.
 - The view-dock app installed via Xcode (see Installation below) — it isn't
   distributed through the App Store.
 
