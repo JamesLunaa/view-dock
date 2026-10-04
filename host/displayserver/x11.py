@@ -187,19 +187,36 @@ class X11DisplayServer(DisplayServer):
             logger.error("No real display is lit after the handoff; running xrandr --auto.")
             subprocess.run(["xrandr", "--auto"], check=False)
 
-    def capture_frame(self) -> np.ndarray:
-        if self._sct is None or self._monitor is None:
-            raise RuntimeError("Virtual display not created; call create_virtual_display() first.")
+    supports_bgra_capture = True
 
-        self._refresh_geometry_if_moved()
-        shot = self._sct.grab(self._monitor)
+    def capture_frame(self) -> np.ndarray:
+        shot = self._grab()
         # mss returns BGRA; drop alpha and reorder to RGB for the encoder.
         # Advanced indexing copies, so the result is safe to draw into below.
         frame = np.asarray(shot)[:, :, [2, 1, 0]]
+        self._draw_cursor(frame, bgr=False)
+        return frame
 
+    def capture_frame_bgra(self) -> np.ndarray:
+        """The frame exactly as X11 delivers it (BGRA), skipping the reorder copy
+        `capture_frame` does — about 4 ms of a 16 ms frame budget at 60 fps."""
+        shot = self._grab()
+        frame = np.asarray(shot)  # a view of this grab's own buffer, not shared between frames
+        if not frame.flags.writeable:
+            frame = frame.copy()  # the cursor is drawn in place below
+        self._draw_cursor(frame, bgr=True)
+        return frame
+
+    def _grab(self):
+        if self._sct is None or self._monitor is None:
+            raise RuntimeError("Virtual display not created; call create_virtual_display() first.")
+        self._refresh_geometry_if_moved()
+        return self._sct.grab(self._monitor)
+
+    def _draw_cursor(self, frame: np.ndarray, bgr: bool) -> None:
         if self._cursor is not None:
             try:
-                self._cursor.composite(frame, self._monitor)
+                self._cursor.composite(frame, self._monitor, bgr=bgr)
                 self._cursor_failures = 0
             except Exception:
                 self._cursor_failures += 1
@@ -212,8 +229,6 @@ class X11DisplayServer(DisplayServer):
                     )
                     self._cursor.close()
                     self._cursor = None
-
-        return frame
 
     def _refresh_geometry_if_moved(self) -> None:
         """Re-resolve the capture rectangle after a display rearrangement.

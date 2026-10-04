@@ -322,7 +322,14 @@ WebRTC settings; the USB (wired) stream uses `VIEWDOCK_X264_PRESET` but has its
 own frame rate, bitrate and keyframe settings. Every 5 s it logs
 `wired: fps=… bitrate=… capture=…ms convert=…ms encode=…ms`: if fps sits below
 the target, the stage with the largest time is the bottleneck. The stages run as
-a pipeline, so the achievable rate is about `1000 / (slowest stage in ms)`.
+a pipeline, so the achievable rate is about `1000 / (slowest stage in ms)` —
+but Python's global lock lets only some of the work overlap, so in practice the
+total of the three is what matters. On X11 the capture hands frames over in
+their native BGRA layout and the colour conversion reads them without copying
+(`capture_frame_bgra`); typical stage times at 1440x648 are then roughly
+capture 3 ms, convert 7 ms, encode 5 ms, comfortably inside the 16.7 ms a 60 fps
+frame allows. Display servers without that fast path (the Wayland fallbacks)
+use the slower RGB route.
 For Wi-Fi, `VIEWDOCK_TARGET_FPS=60` raises the WebRTC rate (more CPU and
 bandwidth; the adaptive bitrate still applies).
 

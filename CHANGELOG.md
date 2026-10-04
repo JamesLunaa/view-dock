@@ -66,7 +66,10 @@ Nothing has been tagged yet; everything below is what currently lives on
 
 - The USB (wired) stream now runs at 60 fps by default (it was capped at 30 by the
   WebRTC setting), via a capture → convert → encode pipeline, with a
-  `VIEWDOCK_WIRED_FPS` override and per-stage timings in the log.
+  `VIEWDOCK_WIRED_FPS` override and per-stage timings in the log. On X11 the
+  capture now skips the RGB reorder copy and the conversion reads the raw BGRA
+  buffer directly, cutting the per-frame cost roughly in half (measured: capture
+  ~6 → 2.4 ms, convert ~16 → 6.6 ms).
 
 ### Fixed
 - The iPad app icon is now actually packaged into the app: `project.yml` listed the

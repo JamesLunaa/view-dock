@@ -44,8 +44,17 @@ def _put_latest(queue: asyncio.Queue, item) -> None:
     queue.put_nowait(item)
 
 
-def _to_yuv(rgb) -> VideoFrame:
-    return VideoFrame.from_ndarray(rgb, format="rgb24").reformat(format="yuv420p")
+def _to_yuv(array, bgra: bool) -> VideoFrame:
+    """Colour-convert a captured frame to the encoder's yuv420p.
+
+    The BGRA path wraps the capture buffer without copying (`from_numpy_buffer`)
+    and converts from there, which is both cheaper than RGB24 -> yuv420p and
+    skips two copies. The RGB path keeps `from_ndarray`, which copies and so also
+    copes with the non-contiguous arrays the channel reorder produces.
+    """
+    if bgra:
+        return VideoFrame.from_numpy_buffer(array, format="bgra").reformat(format="yuv420p")
+    return VideoFrame.from_ndarray(array, format="rgb24").reformat(format="yuv420p")
 
 
 class _StageTimes:
@@ -157,6 +166,8 @@ class WiredSession:
         assert self._transport is not None
         loop = asyncio.get_running_loop()
         encoder = AnnexBEncoder(self._display_config.capture_width, self._display_config.capture_height)
+        bgra = self._display_server.supports_bgra_capture
+        capture = self._display_server.capture_frame_bgra if bgra else self._display_server.capture_frame
         raw_frames: asyncio.Queue = asyncio.Queue(maxsize=1)
         ready_frames: asyncio.Queue = asyncio.Queue(maxsize=1)
         times = _StageTimes()
@@ -175,15 +186,15 @@ class WiredSession:
                     await asyncio.sleep(max(next_deadline - now, 0))
                 next_deadline += _FRAME_PTIME
                 began = time.perf_counter()
-                rgb = await loop.run_in_executor(None, self._display_server.capture_frame)
+                captured = await loop.run_in_executor(None, capture)
                 times.add("capture", began)
-                _put_latest(raw_frames, rgb)
+                _put_latest(raw_frames, captured)
 
         async def convert_stage() -> None:
             while True:
-                rgb = await raw_frames.get()
+                captured = await raw_frames.get()
                 began = time.perf_counter()
-                frame = await loop.run_in_executor(None, _to_yuv, rgb)
+                frame = await loop.run_in_executor(None, _to_yuv, captured, bgra)
                 times.add("convert", began)
                 _put_latest(ready_frames, frame)
 

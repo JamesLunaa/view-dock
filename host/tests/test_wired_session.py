@@ -93,6 +93,8 @@ class FakeWiredTransport(Transport):
 
 
 class FakeDisplay:
+    supports_bgra_capture = False
+
     def capture_frame(self):
         return np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
 
@@ -252,3 +254,59 @@ def test_stream_runs_faster_than_the_old_30fps_cap():
         assert len(_video(transport)) >= 55
 
     asyncio.run(body())
+
+
+# --- BGRA fast path -------------------------------------------------------------
+
+
+class SolidDisplay:
+    """A display of one flat colour, available as RGB or (fast path) BGRA."""
+
+    def __init__(self, rgb: tuple[int, int, int], bgra: bool) -> None:
+        self.supports_bgra_capture = bgra
+        self._rgb = rgb
+
+    def capture_frame(self):
+        return np.full((HEIGHT, WIDTH, 3), self._rgb, dtype=np.uint8)
+
+    def capture_frame_bgra(self):
+        r, g, b = self._rgb
+        return np.full((HEIGHT, WIDTH, 4), (b, g, r, 255), dtype=np.uint8)
+
+
+def _decoded_planes(display) -> tuple[float, float, float]:
+    """Mean Y, U, V of the first frame the wired stream sends for `display`."""
+    import av
+
+    async def body():
+        transport = FakeWiredTransport()
+        session = WiredSession(display, RecordingInjector(), DisplayConfig(width=WIDTH, height=HEIGHT))
+        await session.start(transport)
+        await _wait_for(lambda: _video(transport))
+        await session.close()
+        return _video(transport)[0][messages.WIRED_VIDEO_HEADER_SIZE:]
+
+    access_unit = asyncio.run(body())
+    decoder = av.CodecContext.create("h264", "r")
+    (frame,) = decoder.decode(av.Packet(access_unit))
+    y, u, v = (np.frombuffer(bytes(plane), dtype=np.uint8) for plane in frame.planes[:3])
+    return float(y.mean()), float(u.mean()), float(v.mean())
+
+
+@pytest.mark.parametrize("rgb", [(255, 0, 0), (0, 255, 0), (0, 0, 255), (200, 120, 40)])
+def test_bgra_path_gives_the_same_colours_as_the_rgb_path(rgb):
+    """The fast path must not swap red and blue (the classic BGR mix-up): the
+    stream of a flat colour has to decode to the same Y/U/V either way."""
+    via_rgb = _decoded_planes(SolidDisplay(rgb, bgra=False))
+    via_bgra = _decoded_planes(SolidDisplay(rgb, bgra=True))
+    for rgb_value, bgra_value in zip(via_rgb, via_bgra):
+        assert abs(rgb_value - bgra_value) < 3, f"{rgb}: rgb path {via_rgb} vs bgra path {via_bgra}"
+
+
+def test_red_and_blue_are_distinguishable_through_the_bgra_path():
+    """Guard for the test above: if channel order were ignored, red and blue
+    would produce the same output and the comparison would prove nothing."""
+    red = _decoded_planes(SolidDisplay((255, 0, 0), bgra=True))
+    blue = _decoded_planes(SolidDisplay((0, 0, 255), bgra=True))
+    assert red[2] - blue[2] > 60, "red must have far more V than blue"
+    assert blue[1] - red[1] > 60, "blue must have far more U than red"
