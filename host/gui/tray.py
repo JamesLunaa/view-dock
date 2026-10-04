@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """KDE tray applet + window for the host.
 
 Reuses the exact same `host/runner.py` `HostRunner` and `host/presets.py`

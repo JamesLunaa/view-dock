@@ -29,6 +29,14 @@ under *Changed*. Update the host and the iPad app together.
   works with the new host (it keeps using WebRTC). The wire protocol's own version
   (1.2) is unchanged; Android is unaffected.
 
+- **License: GPL-3.0-or-later (was MIT).** From this release on view-dock is licensed under
+  the GNU GPL v3 or later, with the copyright held by **James Luna**. Versions v1.0.0–v1.0.4
+  stay available under the MIT License. Every source file now carries a license and copyright
+  notice; `LICENSE` is the GPL text, `NOTICE` has the credit, the history of the MIT releases
+  and the rule about the name and icon, and `THIRD_PARTY_NOTICES.md` lists the libraries used
+  and their licenses (all GPL-compatible). Contributions are accepted under the terms in
+  `CONTRIBUTING.md`.
+
 ### Added
 - **iPad wired stream.** Verified on an iPad Air 11" (M3). The iPad app can now take the
   same wired H.264 stream as Android over its USB cable, with no Wi-Fi: the

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Device-resolution preset list shared by `host/ui/` and `host/gui/`, so the
 curses UI and the Qt tray offer the exact same choices instead of drifting.
 """

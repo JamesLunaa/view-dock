@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 # Launcher for the host GUI (host/gui/), meant to be run via the .desktop
 # entry (scripts/install-desktop-entry.sh installs it), not directly — it
 # hardcodes nothing user-specific itself, but `python -m host.gui` needs to

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Confirms the messages host/streaming/webrtc_session.py actually constructs
 at runtime (hello, display_info) conform to protocol/schema/ — as opposed to
 test_protocol_validation.py's hand-written samples, this exercises the real

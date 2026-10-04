@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Main window for the host GUI: the actual controls (resolution, start/stop,
 live log) that the tray icon's right-click menu duplicates in miniature.
 Launching `python -m host.gui` opens this; the tray icon stays around so the

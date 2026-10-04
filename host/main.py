@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Entrypoint for the view-dock host server.
 
 Picks a transport (USB preferred, Wi-Fi fallback), brings up

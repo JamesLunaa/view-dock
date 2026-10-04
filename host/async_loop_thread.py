@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Runs an asyncio event loop on a background thread.
 
 `HostRunner.run()` is a long-lived coroutine (it blocks until the session

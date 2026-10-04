@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """The pointer overlay must paint the same colours whichever channel order the
 frame is in: the BGRA fast path (`capture_frame_bgra`) hands it BGR(A) frames.
 """

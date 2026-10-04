@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """H.264 encoder for the wired stream: raw Annex-B access units, no RTP.
 
 Settings mirror `encoder_tuning` (baseline profile, zerolatency so there are no

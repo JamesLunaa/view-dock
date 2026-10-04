@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 James Luna
+
 import Foundation
 
 /// RFC 6455 framing, kept free of any networking so it can be unit-tested on its

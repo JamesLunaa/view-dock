@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Abstraction over a Linux display server's virtual-monitor + capture
 capabilities, so `streaming/` doesn't need to know whether it's talking to
 X11 or (later) Wayland.

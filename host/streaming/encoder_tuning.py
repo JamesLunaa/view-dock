@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Tuned H.264 encoder for aiortc's video sender.
 
 aiortc's stock `H264Encoder` is built for webcam calls: 1 Mbps start, clamped

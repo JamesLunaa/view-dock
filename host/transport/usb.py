@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """USB transport: tunnels a local TCP port to a matching port on the iPad via
 `usbmuxd`, using the `iproxy` CLI from `libimobiledevice`.
 

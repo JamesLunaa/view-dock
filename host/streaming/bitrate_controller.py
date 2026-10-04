@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Adaptive bitrate: turns network samples into a target encoder bitrate.
 
 Pure logic with no aiortc dependency, so it's unit-testable with a fake

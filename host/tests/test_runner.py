@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Covers the bug hit live in host/ui/: pressing stop while HostRunner.run()
 is still blocked inside transport.connect() (e.g. Wi-Fi waiting for an iPad
 to show up) did nothing, because nothing was awaiting the stop-request event

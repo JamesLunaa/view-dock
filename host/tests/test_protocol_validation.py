@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Verifies protocol/schema/*.json stays the actual source of truth for
 message shapes, per protocol/PROTOCOL.md's working convention — catches
 drift between protocol/messages.py's constants, protocol/validation.py's

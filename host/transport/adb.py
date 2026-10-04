@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Android USB transport: tunnels a local TCP port to a matching port on the
 phone/tablet via `adb forward`, the Android counterpart to `iproxy`.
 

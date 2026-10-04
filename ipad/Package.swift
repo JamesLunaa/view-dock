@@ -1,4 +1,7 @@
 // swift-tools-version:5.9
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 James Luna
+
 //
 // Not how the app is built (that's `project.yml` + XcodeGen). This package exists
 // only so the Foundation-only logic — protocol messages, WebSocket framing,

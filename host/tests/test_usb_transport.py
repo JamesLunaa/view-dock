@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Covers a crash hit live: unplugging the iPad kills `iproxy` on its own
 (it exits once the USB device it's tunneling to disappears), and
 UsbTransport.disconnect() calling .terminate() on that already-dead process

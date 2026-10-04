@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """JSON Schema validation against `protocol/schema/*.json` — the source of
 truth for message shapes per `protocol/PROTOCOL.md`, which already asks both
 implementations to validate against these during development. Only `host`

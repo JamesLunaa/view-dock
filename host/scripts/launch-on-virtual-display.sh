@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 # Launches a command with QT_SCALE_FACTOR/GDK_SCALE set to match the host's
 # VIEWDOCK_DISPLAY_SCALE, for an app you're opening fresh onto the virtual
 # display rather than dragging over from the built-in screen.

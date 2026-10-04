@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 James Luna
+
 import WebRTC
 
 /// Swift-concurrency wrappers around the completion-handler-based

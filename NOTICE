@@ -1,0 +1,36 @@
+view-dock
+Copyright (C) 2026 James Luna
+
+view-dock is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. It is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the file LICENSE for the full text, or
+<https://www.gnu.org/licenses/>.
+
+When you redistribute view-dock or a work based on it, in source or in a built
+app, you must keep this notice and the copyright line above, and license your
+whole work under the GPL too (see LICENSE). Please keep the credit visible to
+users, for example on an About or Licenses screen.
+
+Earlier releases
+----------------
+Versions v1.0.0 through v1.0.4 were released under the MIT License, with the
+same copyright holder. Copies of those versions remain available under the MIT
+License. Everything from v2.0.0 on is GPL-3.0-or-later. (The MIT text for those
+releases is in the repository history: `git show v1.0.4:LICENSE`.)
+
+Name and icon
+-------------
+As permitted by section 7(e) of the GPL, no rights are granted to use the name
+"view-dock" or the app icon (see `branding/`) as trademarks or logos. The code
+and the artwork may be copied and modified under the GPL like everything else,
+but if you distribute a modified version, please give it a different name and
+icon so it isn't mistaken for the original, and don't present it as made or
+endorsed by James Luna.
+
+Third-party software
+--------------------
+view-dock uses open-source libraries under their own licenses; see
+THIRD_PARTY_NOTICES.md.

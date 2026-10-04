@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """One wired session: H.264 video + control messages over a single tunnel.
 
 Counterpart of `webrtc_session.WebRtcSession` for transports that set

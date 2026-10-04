@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 James Luna
+
 """Pure parsing-logic tests for displayserver/x11.py's xrandr-output helpers,
 added alongside host/ui/ (which relies on these for its pre-flight check and
 stale-mode cleanup) — these run against canned `xrandr --query` text rather
