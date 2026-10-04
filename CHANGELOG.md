@@ -64,7 +64,14 @@ Nothing has been tagged yet; everything below is what currently lives on
   icon's design) so the three platforms match. The host's tray icon, which used
   to be a bare status dot, now shows that icon with a status badge.
 
+- The USB (wired) stream now runs at 60 fps by default (it was capped at 30 by the
+  WebRTC setting), via a capture → convert → encode pipeline, with a
+  `VIEWDOCK_WIRED_FPS` override and per-stage timings in the log.
+
 ### Fixed
+- The iPad app icon is now actually packaged into the app: `project.yml` listed the
+  asset catalog under a `resources:` key XcodeGen doesn't have and silently
+  ignores, so the app shipped with no icon. It is now under `sources`.
 - The host no longer ends the whole session (and tears down the virtual
   display) when a device closes the signaling connection mid-handshake; it
   waits for the device to reconnect.

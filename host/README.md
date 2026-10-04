@@ -313,12 +313,18 @@ encode time (avg/p95), RTT, loss, and the current target bitrate.
 | `VIEWDOCK_TARGET_FPS` | `30` | Stream frame rate |
 | `VIEWDOCK_KEYFRAME_INTERVAL` | `30.0` | Seconds between keyframes |
 | `VIEWDOCK_VIDEO_CODEC` | `h264` | `vp8` to offer VP8 first instead |
+| `VIEWDOCK_WIRED_FPS` | `60` | Frame rate of the USB (wired) stream. Separate from `VIEWDOCK_TARGET_FPS`, which is the WebRTC/Wi-Fi rate (default 30). Going past the display's refresh (`VIEWDOCK_DISPLAY_REFRESH_HZ`, default 60) gains nothing |
 | `VIEWDOCK_WIRED_BITRATE_MBPS` | `20.0` | Fixed bitrate of the Android USB stream (not adaptive; a cable has the bandwidth) |
 | `VIEWDOCK_WIRED_KEYFRAME_INTERVAL` | `10.0` | Seconds between keyframes on the Android USB stream (the phone can also ask for one) |
 
 The first four rows above (bitrate range, preset, FPS, keyframe interval) are
-WebRTC settings; the Android USB stream uses `VIEWDOCK_X264_PRESET` and
-`VIEWDOCK_TARGET_FPS` but has its own bitrate and keyframe settings.
+WebRTC settings; the USB (wired) stream uses `VIEWDOCK_X264_PRESET` but has its
+own frame rate, bitrate and keyframe settings. Every 5 s it logs
+`wired: fps=… bitrate=… capture=…ms convert=…ms encode=…ms`: if fps sits below
+the target, the stage with the largest time is the bottleneck. The stages run as
+a pipeline, so the achievable rate is about `1000 / (slowest stage in ms)`.
+For Wi-Fi, `VIEWDOCK_TARGET_FPS=60` raises the WebRTC rate (more CPU and
+bandwidth; the adaptive bitrate still applies).
 
 ## Reconnecting after a drop
 

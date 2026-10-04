@@ -224,3 +224,31 @@ def test_stream_decodes_with_an_independent_h264_decoder():
 
     assert len(frames) == 12
     assert {(f.width, f.height) for f in frames} == {(WIDTH, HEIGHT)}
+
+
+def test_put_latest_drops_the_stale_frame_instead_of_queueing_it():
+    from host.streaming.wired_session import _put_latest
+
+    async def body():
+        queue: asyncio.Queue = asyncio.Queue(maxsize=1)
+        _put_latest(queue, "old")
+        _put_latest(queue, "new")  # the next stage hadn't taken "old" yet
+        assert queue.qsize() == 1 and queue.get_nowait() == "new"
+
+    asyncio.run(body())
+
+
+def test_stream_runs_faster_than_the_old_30fps_cap():
+    """The wired stream used to be paced to the WebRTC setting (30 fps). At the
+    default it must now deliver well beyond that: with 1.5 s of tiny frames the
+    old cap allowed at most ~45; nominal 60 fps gives ~90."""
+
+    async def body():
+        transport = FakeWiredTransport()
+        session, _ = _session(transport)
+        await session.start(transport)
+        await asyncio.sleep(1.5)
+        await session.close()
+        assert len(_video(transport)) >= 55
+
+    asyncio.run(body())

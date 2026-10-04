@@ -62,3 +62,12 @@ def test_xcode_project_uses_the_app_icon_set():
 def test_host_icon_is_the_256px_png_the_gui_and_launcher_load():
     width, height, _ = _png_header(ROOT / "host/gui/assets/icon.png")
     assert (width, height) == (256, 256)
+
+
+def test_xcode_project_actually_includes_the_asset_catalog():
+    """XcodeGen ignores unknown keys silently: the catalog used to sit under a
+    `resources:` key that doesn't exist, so the icon was never packaged into the
+    app. Asset catalogs must be listed under `sources`."""
+    spec = (ROOT / "ipad/project.yml").read_text()
+    assert "- path: Resources/Assets.xcassets" in spec
+    assert "\n    resources:" not in spec, "`resources:` is not an XcodeGen target key"
