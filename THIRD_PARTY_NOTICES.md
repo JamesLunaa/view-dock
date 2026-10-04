@@ -29,15 +29,28 @@ apps, typically on an in-app Licenses screen.
 | Library | License |
 |---|---|
 | stream-webrtc-android (prebuilt WebRTC) | Apache-2.0 |
+| WebRTC (inside stream-webrtc-android) | BSD-3-Clause |
 | Java-WebSocket | MIT |
-| kotlinx.coroutines | Apache-2.0 |
+| SLF4J API (brought in by Java-WebSocket) | MIT |
 | AndroidX / Jetpack Compose | Apache-2.0 |
+| Kotlin standard library, kotlinx.coroutines, kotlinx.serialization | Apache-2.0 |
+| JetBrains Annotations, JSpecify, Guava ListenableFuture | Apache-2.0 |
 
 ## iPad app (`ipad/project.yml`)
 
 | Library | License |
 |---|---|
 | WebRTC framework binaries (stasel/WebRTC) | BSD-3-Clause |
+| WebRTC (inside the framework) | BSD-3-Clause |
+
+## In the apps
+
+Both apps show these notices, with the full license texts, on their **About → Third-party
+licenses** screen. That text is generated from [`legal/components.json`](legal/components.json)
+(and the texts in `legal/licenses/`) by `python scripts/generate_legal.py` — edit those, not the
+bundled copies. WebRTC itself contains further components (for example BoringSSL, libvpx,
+libyuv, Opus, abseil-cpp) under their own permissive licenses; the apps point to this in
+their notices but do not reproduce each of those separately.
 
 ## Build tooling (not shipped inside the apps)
 

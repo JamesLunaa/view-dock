@@ -6,7 +6,7 @@
     python scripts/add_license_headers.py           # add any that are missing
     python scripts/add_license_headers.py --check   # just report; exit 1 if any are missing
 
-It only touches tracked .py / .kt / .kts / .swift / .sh files and is safe to re-run
+It only touches .py / .kt / .kts / .swift / .sh files known to git (tracked or new, not ignored) and is safe to re-run
 (files that already have the notice are left alone). Run it after adding a source file;
 a host test (`host/tests/test_license_headers.py`) fails if one is missing.
 """
@@ -25,7 +25,9 @@ COMMENT_PREFIX = {".py": "#", ".sh": "#", ".kt": "//", ".kts": "//", ".swift": "
 
 def source_files() -> list[pathlib.Path]:
     names = subprocess.run(
-        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+        # tracked files plus new ones that aren't ignored, so a file is covered before it is committed
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+        cwd=ROOT, capture_output=True, text=True, check=True
     ).stdout.splitlines()
     return [ROOT / n for n in names if pathlib.Path(n).suffix in COMMENT_PREFIX and (ROOT / n).is_file()]
 

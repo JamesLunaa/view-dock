@@ -156,7 +156,10 @@ remove or change these notices, or the credit in `NOTICE` and the README, when e
 
 New third-party libraries must be compatible with the GPL-3.0-or-later (permissive
 licenses and LGPL are; GPL-2.0-only and anything "non-commercial" are not) and must be
-added to [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+added to [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). If an *app* gains or drops a
+library, also update [`legal/components.json`](legal/components.json) (with its license
+text in `legal/licenses/`) and run `python scripts/generate_legal.py` — that regenerates
+the About / Licenses screens' text, and a host test fails if it is stale.
 
 ## Code style
 

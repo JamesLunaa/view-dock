@@ -19,6 +19,16 @@ untested. Known limits:
 - Touch moves the host's shared pointer rather than acting as a touchscreen
   bound to the virtual display (same as the iPad).
 
+## About and Licenses
+
+The connect screen has an **About** button (top right): the app's version and copyright
+(James Luna), the GPL notices, the full GNU GPL v3 text, the licenses of the libraries
+inside the app, and a link to the source code. The texts are bundled in
+`app/src/main/assets/legal/` and are **generated** — edit `legal/components.json` and run
+`python scripts/generate_legal.py`, don't change them by hand. (Checked on a vivo Y28: the
+screens, scrolling, the system Back key, and the source-code link, which opens in whatever
+app handles GitHub links.)
+
 ## Building
 
 Requires a JDK 17+ (21 recommended) and the Android SDK with platform 37 and

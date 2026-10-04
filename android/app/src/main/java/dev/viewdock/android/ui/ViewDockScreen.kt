@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -24,13 +26,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.viewdock.android.R
 import dev.viewdock.android.input.TouchInputForwarder
 import dev.viewdock.android.net.ConnectionManager
 import dev.viewdock.android.net.WebRtcClient
@@ -44,6 +49,7 @@ import org.webrtc.SurfaceViewRenderer
 fun ViewDockScreen(connection: ConnectionManager) {
     val session by connection.session.collectAsState()
     val status by connection.status.collectAsState()
+    var page by rememberSaveable { mutableStateOf(AboutPage.NONE) }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         val active = session
@@ -55,11 +61,36 @@ fun ViewDockScreen(connection: ConnectionManager) {
                 else -> Unit
             }
         } else {
-            ConnectScreen(
-                status = status,
-                initialHost = connection.savedHostAddress,
-                onConnect = connection::connectOverWifi,
-            )
+            when (page) {
+                AboutPage.NONE -> {
+                    ConnectScreen(
+                        status = status,
+                        initialHost = connection.savedHostAddress,
+                        onConnect = connection::connectOverWifi,
+                    )
+                    // In the corner, not in the centered column: the screen is landscape-only and
+                    // that column is already close to a phone's height.
+                    TextButton(
+                        onClick = { page = AboutPage.ABOUT },
+                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                        colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue),
+                    ) { Text(stringResource(R.string.about_open)) }
+                }
+                AboutPage.ABOUT -> AboutScreen(onBack = { page = AboutPage.NONE }, onOpen = { page = it })
+                AboutPage.LICENSE -> LegalTextScreen(
+                    title = stringResource(R.string.about_license),
+                    assetPath = LegalInfo.LICENSE_ASSET,
+                    onBack = { page = AboutPage.ABOUT },
+                )
+                AboutPage.THIRD_PARTY -> LegalTextScreen(
+                    title = stringResource(R.string.about_third_party),
+                    assetPath = LegalInfo.NOTICES_ASSET,
+                    onBack = { page = AboutPage.ABOUT },
+                )
+            }
+            BackHandler(enabled = page != AboutPage.NONE) {
+                page = if (page == AboutPage.ABOUT) AboutPage.NONE else AboutPage.ABOUT
+            }
         }
     }
 }

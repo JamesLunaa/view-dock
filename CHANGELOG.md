@@ -15,6 +15,16 @@ interoperate if no protocol change sits between them.
 
 ## [Unreleased]
 
+### Added
+- **About and Licenses screens in both apps.** The connect screen has an About button
+  showing the app version, the copyright (James Luna), the GPL "free software / no
+  warranty" notices, the full GNU GPL v3 text, the licenses of the libraries bundled in
+  that app, and a link to the source code. The texts are generated from `LICENSE` and
+  `legal/components.json` (`python scripts/generate_legal.py`). Verified: the Android
+  screens on a vivo Y28 (all three screens, scrolling, the system Back key and the
+  source-code link); the iPad screens are unit-tested where possible and confirmed to be
+  packaged into the project, but have not been run on a device yet.
+
 ## [2.0.0] - 2026-10-04
 
 The headline change is the iPad's wired USB stream. It is a **major** release because an

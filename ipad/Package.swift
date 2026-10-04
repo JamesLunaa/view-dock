@@ -22,6 +22,7 @@ let package = Package(
                 "ViewDockApp.swift",
                 "ContentView.swift",
                 "Input",
+                "Legal/AboutView.swift",
                 "Networking/ConnectionManager.swift",
                 "Networking/H264SampleBufferFactory.swift",
                 "Networking/RTCPeerConnection+Async.swift",
@@ -37,6 +38,7 @@ let package = Package(
                 "Protocol/Messages.swift",
                 "Networking/WebSocketFraming.swift",
                 "Networking/H264AnnexB.swift",
+                "Legal/AppInfo.swift",
             ]
         ),
         .testTarget(
