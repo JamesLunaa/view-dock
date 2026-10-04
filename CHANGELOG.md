@@ -52,6 +52,18 @@ Nothing has been tagged yet; everything below is what currently lives on
 - Dependency and code scanning through GitHub (Dependabot updates, CodeQL,
   dependency review on pull requests).
 
+- **iPad wired stream (untested on hardware).** The iPad app can now take the
+  same wired H.264 stream as Android over its USB cable, with no Wi-Fi: the
+  app announces support with a `hello`, the host (protocol 1.2+) detects it and
+  streams through the tunnel, and `AVSampleBufferDisplayLayer` decodes it. Older
+  iPad builds keep using WebRTC. Unit tests for the Swift protocol, WebSocket
+  framing and H.264 parsing run with `swift test` (macOS or Linux).
+
+- App icons: the iPad app now has one (it had none), and the host icon is
+  redrawn, all derived from a single master (`branding/icon.svg`, the Android
+  icon's design) so the three platforms match. The host's tray icon, which used
+  to be a bare status dot, now shows that icon with a status badge.
+
 ### Fixed
 - The host no longer ends the whole session (and tears down the virtual
   display) when a device closes the signaling connection mid-handshake; it
@@ -70,8 +82,9 @@ Nothing has been tagged yet; everything below is what currently lives on
   contact only).
 - Android apps are built from source (debug builds); the app is landscape-only
   and tested on a single device.
-- The iPad's USB connection carries only the handshake; its video goes over
-  Wi-Fi. Android's USB connection carries everything.
+- The iPad's new wired USB stream has not been run on a real iPad yet; until
+  then assume its video still needs Wi-Fi. Android's USB connection carries
+  everything and is verified.
 - No Wi-Fi discovery — the host's IP is typed into the app by hand.
 - X11 only; no Wayland support on the host.
 - No authentication or pairing on either transport — see

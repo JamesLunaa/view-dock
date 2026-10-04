@@ -1,3 +1,4 @@
 <resources>
+    <!-- Generated from branding/icon.svg by branding/generate_icons.py. -->
     <color name="ic_launcher_background">#1B2A49</color>
 </resources>

@@ -2,9 +2,10 @@ import CryptoKit
 import Foundation
 import Network
 
-/// Minimal RFC 6455 WebSocket server, used only for the USB transport's
-/// bootstrap signaling (one SDP offer in, one answer out — see
-/// `SignalingChannel.swift`). `iproxy <local_port> <device_port>` on the host
+/// Minimal RFC 6455 WebSocket server for the USB transport: the host connects
+/// through the tunnel, then either bootstraps WebRTC signaling over it (one SDP
+/// offer in, one answer out — see `SignalingChannel.swift`) or, for the wired
+/// stream, carries the whole session on it (see `WiredClient.swift`). `iproxy <local_port> <device_port>` on the host
 /// relays connections to a port *this device* must be listening on, so for
 /// USB the iPad is the WebSocket server and the host connects through the
 /// tunnel as a client (see `host/transport/usb.py`).
@@ -108,62 +109,51 @@ final class WebSocketServer {
         return Data(digest).base64EncodedString()
     }
 
-    // MARK: - Framing (text frames only — all we ever send is JSON)
+    // MARK: - Framing
+    //
+    // The wire format itself lives in `WebSocketFraming.swift` (and is unit
+    // tested there); this is just the I/O around it.
+
+    private var assembler = WebSocketMessageAssembler()
 
     func sendText(_ text: String) async throws {
-        let payload = Data(text.utf8)
-        var frame = Data([0x81]) // FIN + text opcode
-        frame.append(contentsOf: Self.encodeLength(payload.count))
-        frame.append(payload)
-        try await write(frame)
+        try await write(WebSocketFraming.encode(opcode: WebSocketOpcode.text, payload: Data(text.utf8)))
+    }
+
+    /// The next complete text or binary message from the client. Pings are
+    /// answered here and fragmented messages are reassembled, so callers only
+    /// ever see whole messages.
+    func receiveMessage() async throws -> WebSocketMessage {
+        while true {
+            let frame = try await readFrame()
+            switch frame.opcode {
+            case WebSocketOpcode.close:
+                throw ServerError.connectionClosed
+            case WebSocketOpcode.ping:
+                try await write(WebSocketFraming.encode(opcode: WebSocketOpcode.pong, payload: frame.payload))
+            case WebSocketOpcode.pong:
+                continue
+            default:
+                if let message = try assembler.accept(frame) {
+                    return message
+                }
+            }
+        }
     }
 
     func receiveText() async throws -> String {
-        let header = try await readExactly(2)
-        let opcode = header[header.startIndex] & 0x0F
-        let masked = (header[header.startIndex + 1] & 0x80) != 0
-        var length = Int(header[header.startIndex + 1] & 0x7F)
-
-        if length == 126 {
-            let extended = try await readExactly(2)
-            length = extended.reduce(0) { ($0 << 8) | Int($1) }
-        } else if length == 127 {
-            let extended = try await readExactly(8)
-            length = extended.reduce(0) { ($0 << 8) | Int($1) }
-        }
-
-        var maskKey: [UInt8] = []
-        if masked {
-            maskKey = Array(try await readExactly(4))
-        }
-
-        var payload = Array(try await readExactly(length))
-        if masked {
-            for i in 0..<payload.count {
-                payload[i] ^= maskKey[i % 4]
-            }
-        }
-
-        if opcode == 0x8 {
-            throw ServerError.connectionClosed
-        }
-        guard opcode == 0x1, let text = String(bytes: payload, encoding: .utf8) else {
+        guard case .text(let text) = try await receiveMessage() else {
             throw ServerError.unexpectedFrame
         }
         return text
     }
 
-    private static func encodeLength(_ length: Int) -> [UInt8] {
-        if length < 126 {
-            return [UInt8(length)]
-        } else if length <= 0xFFFF {
-            return [126, UInt8((length >> 8) & 0xFF), UInt8(length & 0xFF)]
-        } else {
-            var bytes: [UInt8] = [127]
-            for shift in stride(from: 56, through: 0, by: -8) {
-                bytes.append(UInt8((length >> shift) & 0xFF))
+    private func readFrame() async throws -> WebSocketFrame {
+        while true {
+            if let frame = try WebSocketFraming.decodeFrame(from: &buffer) {
+                return frame
             }
-            return bytes
+            try await fillBuffer()
         }
     }
 

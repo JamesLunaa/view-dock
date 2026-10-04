@@ -19,8 +19,27 @@ import websockets
 from websockets.asyncio.client import ClientConnection, connect
 
 from host.transport.base import Transport
+from protocol import messages
 
 logger = logging.getLogger(__name__)
+
+
+# How long to wait, after the tunnel connects, for the app to announce itself
+# before assuming it is an older WebRTC-only build. Apps that support the wired
+# stream send `hello` immediately, so this only ever delays an old build.
+_CLIENT_HELLO_TIMEOUT_S = 1.0
+
+
+def is_wired_hello(raw: str | bytes) -> bool:
+    """True for a `hello` whose protocol_version is new enough for the wired stream."""
+    if not isinstance(raw, str):
+        return False
+    try:
+        message = json.loads(raw)
+        major, minor = (int(part) for part in str(message["protocol_version"]).split("."))
+        return message["type"] == messages.TYPE_HELLO and (major, minor) >= messages.WIRED_STREAM_MIN_VERSION
+    except (ValueError, KeyError, TypeError):
+        return False
 
 
 class UsbTransport(Transport):
@@ -30,6 +49,8 @@ class UsbTransport(Transport):
         self._iproxy_process: asyncio.subprocess.Process | None = None
         self._iproxy_log_task: asyncio.Task | None = None
         self._connection: ClientConnection | None = None
+        # A message read while probing that turned out not to be a wired hello.
+        self._pending: list[str | bytes] = []
 
     def _tunnel_argv(self) -> list[str]:
         return ["iproxy", str(self._local_port), str(self._device_port)]
@@ -63,6 +84,10 @@ class UsbTransport(Transport):
         # Give iproxy a moment to bind its local listening socket before we
         # try to connect to it.
         self._connection = await self._connect_with_retry()
+        self._pending = []
+        self.__dict__.pop("supports_wired_stream", None)  # re-decided per connection
+        if not self.supports_wired_stream:
+            await self._probe_for_wired_client()
 
     async def disconnect(self) -> None:
         if self._connection is not None:
@@ -90,6 +115,27 @@ class UsbTransport(Transport):
         async for line in self._iproxy_process.stdout:
             logger.info("iproxy: %s", line.decode(errors="replace").rstrip())
 
+    async def _probe_for_wired_client(self) -> None:
+        """Decides between the wired stream and WebRTC for this connection.
+
+        Over `iproxy` the host can't tell which build of the iPad app is
+        listening, so a build that understands the wired stream sends `hello`
+        the moment the tunnel connects. Silence means an older, WebRTC-only
+        build, which is waiting for our SDP offer — so after a short wait the
+        normal flow proceeds. (`AdbTransport` skips this: the Android app is
+        always wired over USB.)
+        """
+        assert self._connection is not None
+        try:
+            raw = await asyncio.wait_for(self._connection.recv(), timeout=_CLIENT_HELLO_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            return
+        if is_wired_hello(raw):
+            self.supports_wired_stream = True
+            logger.info("Client announced wired-stream support")
+        else:
+            self._pending.append(raw)
+
     async def send_message(self, data: str | bytes) -> None:
         """Send one raw WebSocket message (text or binary) — used by the wired
         stream, where this connection carries the whole session."""
@@ -100,6 +146,8 @@ class UsbTransport(Transport):
     async def receive_message(self) -> str | bytes:
         if self._connection is None:
             raise RuntimeError("Not connected.")
+        if self._pending:
+            return self._pending.pop(0)
         return await self._connection.recv()
 
     async def send_signal(self, message: dict) -> None:
@@ -110,7 +158,7 @@ class UsbTransport(Transport):
     async def receive_signal(self) -> dict:
         if self._connection is None:
             raise RuntimeError("Not connected.")
-        raw = await self._connection.recv()
+        raw = self._pending.pop(0) if self._pending else await self._connection.recv()
         return json.loads(raw)
 
     async def _connect_with_retry(

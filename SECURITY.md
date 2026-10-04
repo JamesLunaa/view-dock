@@ -35,8 +35,9 @@ local network. There is no authentication of any kind.**
   framework on the iPad and Android). A passive observer on the LAN cannot
   read your screen contents off the wire. This covers Wi-Fi sessions and the
   iPad.
-- **Android over USB is not WebRTC, and is not encrypted — but never touches
-  the network.** The wired stream (`host/streaming/wired_session.py`,
+- **A wired USB stream is not WebRTC, and is not encrypted — but never touches
+  the network** (this is Android over USB today, and the iPad once its
+  updated app is in use; see the iPad listener note below). Android's wired stream (`host/streaming/wired_session.py`,
   protocol "Wired stream") is plain H.264 and JSON on a WebSocket that
   `adb forward` carries over the USB cable. The app's listener
   (`UsbSignaling` in `android/`) binds `127.0.0.1` only, so unlike the iPad's
@@ -73,7 +74,11 @@ local network. There is no authentication of any kind.**
   attacker who can intercept and rewrite signaling — they can substitute
   their own fingerprint and sit in the middle.
 - **The iPad's USB listener is not USB-only** (the Android app's is: it
-  binds loopback only). For the wired transport the
+  binds loopback only). With the wired stream this matters more than it did:
+  the connection is now the whole session, so whoever on the same Wi-Fi
+  connects to the iPad's port 8766 first (while the app is waiting) could show
+  arbitrary video on the iPad and see its touch coordinates. Restricting the
+  listener to the USB tunnel is a known gap, below. For the wired transport the
   iPad is the server (`ipad/Sources/Networking/WebSocketServer.swift`), and
   its `NWListener` on port 8766 binds all interfaces — while the app is
   waiting for a host, another device on the same Wi-Fi network can connect

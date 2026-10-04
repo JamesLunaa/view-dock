@@ -11,6 +11,7 @@ import Network
 final class ConnectionManager: ObservableObject {
     @Published private(set) var statusDescription = "Waiting for host…"
     @Published private(set) var webRTCClient: WebRTCClient?
+    @Published private(set) var wiredClient: WiredClient?
 
     private var usbSignaling: UsbSignaling?
     private var wifiSignaling: WifiSignaling?
@@ -29,6 +30,8 @@ final class ConnectionManager: ObservableObject {
         isListeningForUsb = false
         webRTCClient?.close()
         webRTCClient = nil
+        wiredClient?.close()
+        wiredClient = nil
         usbSignaling?.close()
         usbSignaling = nil
         wifiSignaling?.close()
@@ -56,7 +59,17 @@ final class ConnectionManager: ObservableObject {
                     }
                 }
                 guard isListeningForUsb else { return }
-                try await negotiate(using: signaling)
+
+                // Announce wired-stream support; a host that has it answers with
+                // its own `hello` and the connection becomes the whole session.
+                // Anything else first (an SDP offer) means plain WebRTC.
+                try await signaling.announceWiredSupport()
+                let first = try await signaling.peekFirstText()
+                if decodeMessageType(from: Data(first.utf8)) == .hello {
+                    startWiredSession(over: signaling)
+                } else {
+                    try await negotiate(using: signaling)
+                }
                 return
             } catch {
                 guard isListeningForUsb else { return }
@@ -80,8 +93,31 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
+    private func startWiredSession(over signaling: UsbSignaling) {
+        guard webRTCClient == nil, wiredClient == nil else { return }
+        let client = WiredClient(signaling: signaling)
+        client.onFinished = { [weak self] in
+            Task { @MainActor in self?.wiredSessionEnded() }
+        }
+        statusDescription = "Connected over USB"
+        wiredClient = client
+    }
+
+    /// The host loops back to "waiting for device" when a session ends, so do
+    /// the same here: drop the dead session and listen for the next host.
+    private func wiredSessionEnded() {
+        guard wiredClient != nil else { return }
+        wiredClient?.close()
+        wiredClient = nil
+        usbSignaling?.close()
+        usbSignaling = nil
+        statusDescription = "Disconnected — waiting for host…"
+        guard isListeningForUsb else { return }
+        Task { await listenForUsb() }
+    }
+
     private func negotiate(using channel: SignalingChannel) async throws {
-        guard webRTCClient == nil else { return } // USB and Wi-Fi could race; first one wins.
+        guard webRTCClient == nil, wiredClient == nil else { return } // USB and Wi-Fi could race; first one wins.
         let client = WebRTCClient()
         statusDescription = "Negotiating…"
         try await client.negotiate(using: channel)

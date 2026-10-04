@@ -20,7 +20,8 @@ restarted.
 **Android is supported** (phones and tablets, Android 8.0+), tested on one
 device so far — see [Compatibility](#compatibility). Over USB it needs no
 Wi-Fi at all: video and input travel through the cable itself, so it also
-works on a network where devices can't reach each other.
+works on a network where devices can't reach each other. The iPad app has the
+same wired stream implemented, but it is untested on hardware.
 
 **Known limitations**, tracked for future work:
 - Touch input is forwarded and injected, but moves the host's *shared*
@@ -35,8 +36,10 @@ works on a network where devices can't reach each other.
   background the picture pauses, and it is meant to resume (via a fresh
   keyframe) when you return, but that hasn't been tested. Android apps are
   built from source; there is no Play Store or prebuilt release yet.
-- The iPad's USB connection carries only the connection handshake; its video
-  still travels over Wi-Fi. (Android's USB connection carries everything.)
+- The iPad's wired USB stream (video through the cable, no Wi-Fi) is new and
+  has **not yet been run on a real iPad**. Until you've built the updated app
+  and confirmed it, assume the iPad still needs a shared Wi-Fi network for
+  video. (Android's USB connection carries everything and is verified.)
 - Neither transport authenticates the device to the host — see
   [Security](#security) before running this on a network you don't control.
 
@@ -51,10 +54,11 @@ the short version:
 video and the control data channel ride a standard WebRTC session — SRTP for
 media, DTLS-keyed SCTP for data. That is mandatory in WebRTC and there is no
 plaintext fallback, so nobody passively sniffing your network can read your
-screen off the wire. The one exception is **Android over USB**: that stream
-isn't WebRTC and isn't encrypted, but it never touches the network — it
-travels inside the USB cable through an `adb` tunnel to a listener bound to
-the phone's loopback address only.
+screen off the wire. The exception is the **wired USB stream** (Android, and
+the iPad once its updated app is in use): it isn't WebRTC and isn't encrypted.
+It travels inside the USB cable through a tunnel, never over Wi-Fi. On Android
+the listener is bound to the phone's loopback address only; the iPad's
+listener is not yet restricted that way — see [SECURITY.md](SECURITY.md).
 
 **Authenticated: no, not at all.** There is no pairing step, no token, and
 no password. The signaling handshake that sets the session up is plain

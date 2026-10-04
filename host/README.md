@@ -26,10 +26,13 @@ events received back from the device.
   the iPad app listens on, so for USB the iPad must be the server, unlike
   Wi-Fi. `adb.py` is the Android equivalent of `usb.py`: same shape (the app
   listens, the host connects through the tunnel) but via `adb forward`.
-  Once connected, the iPad paths and Wi-Fi run the same WebRTC session logic
-  in `streaming/`; the Android USB path instead streams H.264 over the tunnel
-  itself (`streaming/wired_session.py`), since `adb forward` can't carry
-  WebRTC's UDP media — so it needs no Wi-Fi at all.
+  Once connected, Wi-Fi runs the WebRTC session logic in `streaming/`; a USB
+  tunnel instead streams H.264 through itself (`streaming/wired_session.py`),
+  since neither `adb forward` nor `iproxy` can carry WebRTC's UDP media — so
+  it needs no Wi-Fi at all. Android over `adb` is always wired; an iPad over
+  `iproxy` is wired when its app announces support with a `hello` right after
+  the tunnel connects (the host waits about a second, then falls back to
+  WebRTC for older app builds).
 - `input/` — injects `input_event` messages from the iPad into the X11 (or
   later Wayland) session via `uinput`.
 - `scripts/force-connector.sh` — forces a real GPU connector "connected" at
@@ -117,6 +120,11 @@ yet. Video is unaffected. See TODO/TODO.md.
 transports. Over Wi-Fi it uses the same WebRTC session as the iPad. Over USB
 it uses the wired stream (`streaming/wired_session.py`): H.264 + control
 messages straight through the `adb forward` tunnel, no Wi-Fi involved.
+
+**iPad wired stream:** the host side is implemented and tested (it detects an
+updated app by its `hello`, see `transport/usb.py`), and the iPad app has the
+receiving side, but the pair has **not yet been run on an iPad**. An iPad app
+build without it keeps working over WebRTC, as before.
 
 Not yet done: adaptive bitrate from `stats` messages, mDNS discovery for
 Wi-Fi, Pencil pressure/hover, and Wayland support (phase 2).

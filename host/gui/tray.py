@@ -62,6 +62,37 @@ def _dot_icon(color: QColor) -> QIcon:
     return QIcon(pixmap)
 
 
+def _status_icon(color: QColor, size: int = 64) -> QIcon:
+    """The app icon with a status badge in the corner, so the tray shows the same
+    icon as the window and launcher while still telling idle / connecting /
+    connected / error apart at a glance. Falls back to the plain dot if the icon
+    file can't be loaded."""
+    base = QPixmap(_ICON_PATH)
+    if base.isNull():
+        return _dot_icon(color)
+    base = base.scaled(
+        size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+    )
+
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.drawPixmap(0, 0, base)
+
+    # A white ring keeps the badge readable on both light and dark panels.
+    diameter = round(size * 0.44)
+    left = top = size - diameter - 1
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor("#ffffff"))
+    painter.drawEllipse(left, top, diameter, diameter)
+    inset = max(2, round(size * 0.07))
+    painter.setBrush(color)
+    painter.drawEllipse(left + inset, top + inset, diameter - 2 * inset, diameter - 2 * inset)
+    painter.end()
+    return QIcon(pixmap)
+
+
 class _StatusBridge(QObject):
     """Qt auto-connections marshal a cross-thread signal emission onto the
     receiving QObject's own thread automatically — this is what lets
@@ -105,7 +136,7 @@ class TrayApp:
         self._window.quit_requested.connect(self._quit)
         self._window.show()
 
-        self._tray = QSystemTrayIcon(_dot_icon(_STATE_COLORS[State.IDLE]))
+        self._tray = QSystemTrayIcon(_status_icon(_STATE_COLORS[State.IDLE]))
         self._tray.setToolTip("view-dock: idle")
         self._tray.activated.connect(self._on_tray_activated)
 
@@ -200,7 +231,7 @@ class TrayApp:
     def _refresh(self) -> None:
         label = self._state.value + (f": {self._detail}" if self._detail else "")
         self._tray.setToolTip(f"view-dock: {label}")
-        self._tray.setIcon(_dot_icon(_STATE_COLORS[self._state]))
+        self._tray.setIcon(_status_icon(_STATE_COLORS[self._state]))
         self._status_action.setText(label)
         self._window.apply_status(self._state, self._detail, _STATE_COLORS[self._state])
 

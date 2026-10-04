@@ -75,7 +75,15 @@ mapping) that need no device:
 cd android && ./gradlew testDebugUnitTest
 ```
 
-CI runs the host suite only; the Android tests are run by hand for now. There
+The iPad app's Foundation-only logic (protocol messages, WebSocket framing,
+H.264 Annex-B parsing) has unit tests that run without Xcode or a device, on
+macOS or Linux:
+
+```sh
+cd ipad && swift test
+```
+
+CI runs the host suite only; the Android and Swift tests are run by hand for now. There
 is no automated test for the video path on a real decoder — that needs a
 device.
 
@@ -102,6 +110,8 @@ message means touching all five of:
 2. `protocol/messages.py` — the shared constants.
 3. `ipad/Sources/Protocol/Messages.swift` — the Swift mirror of those
    constants (Swift can't import the Python module, so this is hand-synced).
+   Its tests (`ipad/Tests/`) check the JSON shapes against what the host's
+   schemas allow.
 4. `android/app/src/main/java/dev/viewdock/android/protocol/Messages.kt` — the
    Kotlin mirror (hand-synced too).
 5. `protocol/PROTOCOL.md` — the prose description and example payload.
@@ -109,6 +119,20 @@ message means touching all five of:
 Then the code on both sides that sends or handles it, plus a
 [CHANGELOG.md](CHANGELOG.md) entry noting the protocol change, since it
 affects whether a given host and app version interoperate.
+
+## App icons
+
+One master, `branding/icon.svg`, drives the host, iPad and Android icons so
+they stay consistent. Edit it (it's plain SVG, three elements by id) and run:
+
+```sh
+python branding/generate_icons.py   # needs PySide6, like the host GUI
+```
+
+That rewrites `host/gui/assets/icon.png`, the iPad's
+`Assets.xcassets/AppIcon.appiconset` and Android's launcher drawable and
+background colour — commit the results with the master. A host test fails if
+they get out of step.
 
 ## Code style
 
