@@ -208,9 +208,13 @@ In Xcode:
    Settings → Accounts** first if you haven't signed in before). This fills
    in the `DEVELOPMENT_TEAM` that `project.yml` leaves blank — it's
    per-developer and can't be checked into the repo.
-3. Plug your iPad in, select it as the run destination, and Build & Run
-   (`⌘R`). The first launch will ask you to trust the developer certificate
-   on the iPad (Settings → General → VPN & Device Management).
+3. Turn on **Developer Mode** on the iPad (iPadOS 16 and later): plug it into
+   the Mac with Xcode open, then go to Settings → Privacy & Security →
+   Developer Mode, switch it on, and restart when prompted. The toggle only
+   appears once the iPad has been connected to Xcode.
+4. Select your iPad as the run destination and Build & Run (`⌘R`). The first
+   launch will ask you to trust the developer certificate on the iPad
+   (Settings → General → VPN & Device Management).
 
 ### 4. First connection
 
