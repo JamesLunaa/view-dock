@@ -1,6 +1,6 @@
 pkgbase = view-dock
 	pkgdesc = Use an iPad or Android device as an extended second display for Linux (X11)
-	pkgver = 2.0.2
+	pkgver = 2.0.3
 	pkgrel = 1
 	url = https://github.com/JamesLunaa/view-dock
 	arch = any
@@ -26,7 +26,7 @@ pkgbase = view-dock
 	optdepends = libimobiledevice: iPad over USB
 	optdepends = android-tools: Android over USB (adb forward)
 	optdepends = pyside6: tray applet (python -m host.gui)
-	source = view-dock-2.0.2.tar.gz::https://github.com/JamesLunaa/view-dock/archive/refs/tags/v2.0.2.tar.gz
-	sha256sums = 5babf2c3baa0f5996086d52cea87a5fbb1d257694f29f309cc66b07b0ccd6d01
+	source = view-dock-2.0.3.tar.gz::https://github.com/JamesLunaa/view-dock/archive/refs/tags/v2.0.3.tar.gz
+	sha256sums = 3726605361523c31b4334b2662728407311274a0ce0d46ed8abbebf50c5accb6
 
 pkgname = view-dock

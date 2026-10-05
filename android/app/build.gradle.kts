@@ -16,9 +16,9 @@ android {
         targetSdk = 35
         // versionName tracks the repo release (see CHANGELOG.md). versionCode must only
         // ever increase for an update to install over an older build; major*10000 +
-        // minor*100 + patch keeps it in step with versionName (2.0.2 -> 20002).
-        versionCode = 20002
-        versionName = "2.0.2"
+        // minor*100 + patch keeps it in step with versionName (2.0.3 -> 20003).
+        versionCode = 20003
+        versionName = "2.0.3"
     }
 
     buildTypes {

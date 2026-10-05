@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "view-dock"
 # Tracks the repo release; bump with the other version strings (CONTRIBUTING.md).
-version = "2.0.2"
+version = "2.0.3"
 description = "Use an iPad or Android device as an extended second display for Linux (X11)"
 readme = "README.md"
 requires-python = ">=3.11"
