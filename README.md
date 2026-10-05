@@ -8,6 +8,12 @@ native iPadOS app or Android app renders the stream full-screen and forwards
 touch (and Apple Pencil / stylus) input back to the host. Both apps speak the
 same protocol.
 
+<p align="center">
+  <img src="docs/demo.gif" alt="A window is dragged off an Arch Linux laptop's desktop onto an iPad beside it, then an Android phone connects over a USB cable" width="800">
+  <br>
+  <sub>Animated illustration of the workflow, not a screen recording.</sub>
+</p>
+
 Created by James Luna. Free software under the GPL-3.0-or-later — see
 [License](#license).
 
