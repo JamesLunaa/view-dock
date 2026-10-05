@@ -243,7 +243,8 @@ Releases are cut from `master` by the maintainer:
    link definitions at the bottom.
 2. Bump the version strings to match: `versionName` and `versionCode` in
    `android/app/build.gradle.kts` (`versionCode` = major*10000 + minor*100 +
-   patch), and `MARKETING_VERSION` in `ipad/project.yml`. A host test
+   patch), `MARKETING_VERSION` in `ipad/project.yml`, and `version` in
+   `pyproject.toml` (also update `pkgver` in `packaging/arch/PKGBUILD`). A host test
    (`host/tests/test_versions.py`) fails if they disagree with the changelog.
 3. Merge to `master`, then tag that commit: `git tag -a vX.Y.Z -m "vX.Y.Z" &&
    git push origin vX.Y.Z`. Never move or delete a tag once pushed.

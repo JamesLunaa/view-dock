@@ -44,5 +44,5 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon # Resources/Assets.xcassets, generated from branding/icon.svg
         DEVELOPMENT_TEAM: #your team id here
         CODE_SIGN_STYLE: Automatic
-        MARKETING_VERSION: "2.0.0" # tracks the repo release (see CHANGELOG.md)
+        MARKETING_VERSION: "2.0.2" # tracks the repo release (see CHANGELOG.md)
         CURRENT_PROJECT_VERSION: "1" # build number; only needs to increase if you ever upload to App Store Connect

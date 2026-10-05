@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "view-dock"
+# Tracks the repo release; bump with the other version strings (CONTRIBUTING.md).
+version = "2.0.2"
+description = "Use an iPad or Android device as an extended second display for Linux (X11)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "James Luna" }]
+classifiers = [
+    "Operating System :: POSIX :: Linux",
+    "Environment :: X11 Applications",
+]
+# Same floors as host/requirements.txt; that file stays the source for the
+# pinned dev/CI installs (host/requirements.lock.txt).
+dependencies = [
+    "aiortc>=1.9.0",
+    "av>=13.0.0",
+    "websockets>=13.0",
+    "jsonschema>=4.0",
+    "mss>=9.0.0",
+    "numpy>=2.0.0",
+    "python-xlib>=0.33",
+    "python-uinput>=0.11.2",
+]
+
+[project.optional-dependencies]
+# KDE tray applet (python -m host.gui). Sizeable, so not a hard dependency.
+gui = ["PySide6>=6.5"]
+test = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/JamesLunaa/view-dock"
+Source = "https://github.com/JamesLunaa/view-dock"
+Changelog = "https://github.com/JamesLunaa/view-dock/blob/master/CHANGELOG.md"
+
+[project.scripts]
+view-dock = "host.main:main"
+view-dock-tui = "host.ui.tui:main"
+
+[project.gui-scripts]
+view-dock-tray = "host.gui.tray:main"
+
+[tool.setuptools.packages.find]
+include = ["host*", "protocol*"]
+exclude = ["host.tests*"]
+
+[tool.setuptools.package-data]
+protocol = ["schema/*.json"]
+"host.gui" = ["assets/*.png"]

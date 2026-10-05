@@ -56,7 +56,7 @@ async def run() -> None:
         pass
 
 
-if __name__ == "__main__":
+def main() -> None:
     # Several components degrade gracefully rather than failing hard (cursor
     # overlay, screen-layout tracking, schema-invalid control messages) and
     # say so only via logging — without a handler configured those notices
@@ -69,3 +69,7 @@ if __name__ == "__main__":
         asyncio.run(run())
     except KeyboardInterrupt:
         pass
+
+
+if __name__ == "__main__":
+    main()
