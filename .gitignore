@@ -24,3 +24,11 @@ key.properties
 *.mobileprovision
 .env
 .env.*
+
+# Python packaging build output
+build/
+dist/
+*.egg-info/
+packaging/arch/src/
+packaging/arch/pkg/
+packaging/arch/*.tar.*

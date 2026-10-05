@@ -5,15 +5,34 @@ Notable changes to view-dock. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 **How to read this file:** each `## [X.Y.Z] - date` heading is a release that has been
-tagged, newest first. `## [Unreleased]` at the top collects changes made since the latest
-release that haven't shipped yet; it is empty right after a release.
+tagged, newest first. `## [Unreleased]
 
-Because `protocol/` is the contract between separately installed pieces (the Arch
-host and the iPad and Android apps), entries that change it are called out
-explicitly — a host and an app from different releases are only guaranteed to
-interoperate if no protocol change sits between them.
+## [2.0.2] - 2026-10-05
 
-## [Unreleased]
+A packaging-only release: nothing changes at runtime, and any host and app from
+2.0.0 onward still interoperate (no `protocol/` change). It is a patch release
+because no feature was added; the host just became installable as a standard
+Python package, which is what an Arch (AUR) package needs.
+
+### Added
+- **`pyproject.toml`.** The host can now be built and installed as a normal Python
+  package (`python -m build`, `pip install .`). It provides the `view-dock`,
+  `view-dock-tui` and `view-dock-tray` commands and bundles the protocol schemas and
+  the tray icon. Dependencies mirror `host/requirements.txt`. Verified: the wheel
+  builds, installs, and finds its bundled data files; the host test suite passes.
+- **Arch `PKGBUILD`** in `packaging/arch/`, the starting point for an AUR package.
+  Not yet published to the AUR, and not yet installed and run end to end.
+
+### Changed
+- `host.main` gained a `main()` function (used as the `view-dock` entry point);
+  `python -m host.main` behaves as before.
+
+## [2.0.1] - 2026-10-04
+
+This release was tagged without a changelog entry; it is recorded here after the
+fact. Builds from this tag still report their version as `2.0.0` in the Android
+`versionName` and the iPad `MARKETING_VERSION`, because those strings were not bumped
+for it. The About screen shows that version, so it reads 2.0.0 for 2.0.1 builds.
 
 ### Added
 - **About and Licenses screens in both apps.** The connect screen has an About button
@@ -193,7 +212,9 @@ First release.
 - Dependency and code scanning through GitHub (Dependabot updates, CodeQL,
   dependency review on pull requests).
 
-[Unreleased]: https://github.com/JamesLunaa/view-dock/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/JamesLunaa/view-dock/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2
+[2.0.1]: https://github.com/JamesLunaa/view-dock/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/JamesLunaa/view-dock/compare/v1.0.4...v2.0.0
 [1.0.4]: https://github.com/JamesLunaa/view-dock/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/JamesLunaa/view-dock/compare/v1.0.2...v1.0.3

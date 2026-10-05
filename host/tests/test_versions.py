@@ -2,9 +2,9 @@
 # Copyright (C) 2026 James Luna
 
 """The release version must read the same everywhere: the latest dated section of
-CHANGELOG.md, the Android app's versionName/versionCode, and the iPad project's
-MARKETING_VERSION. They're bumped together at release time (see CONTRIBUTING.md);
-this fails if one is forgotten.
+CHANGELOG.md, the Android app's versionName/versionCode, the iPad project's
+MARKETING_VERSION, and pyproject.toml. They're bumped together at release time (see
+CONTRIBUTING.md); this fails if one is forgotten.
 """
 
 import pathlib
@@ -30,6 +30,11 @@ def test_android_version_matches_the_latest_release():
     major, minor, patch = (int(part) for part in name.split("."))
     # Must only ever increase for an update to install over an older build.
     assert code == major * 10000 + minor * 100 + patch
+
+
+def test_python_package_version_matches_the_latest_release():
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    assert re.search(r'^version = "([^"]+)"', pyproject, re.MULTILINE).group(1) == _changelog_version()
 
 
 def test_ipad_version_matches_the_latest_release():

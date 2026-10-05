@@ -1,0 +1,49 @@
+# Maintainer: James Luna <josecynonluna03@gmail.com>
+pkgname=view-dock
+pkgver=2.0.2
+pkgrel=1
+pkgdesc='Use an iPad or Android device as an extended second display for Linux (X11)'
+arch=('any')
+url='https://github.com/JamesLunaa/view-dock'
+license=('GPL-3.0-or-later')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+depends=(
+  'python'
+  'python-av'
+  'python-websockets'
+  'python-jsonschema'
+  'python-mss'
+  'python-numpy'
+  'python-xlib'
+  'python-aiortc'   # AUR
+  'python-uinput'   # AUR
+  'ffmpeg'
+  'xorg-server'
+  'xorg-xrandr'
+  'xf86-video-dummy'
+)
+optdepends=(
+  'usbmuxd: iPad over USB (the -git versions of usbmuxd/libimobiledevice are known to work)'
+  'libimobiledevice: iPad over USB'
+  'android-tools: Android over USB (adb forward)'
+  'pyside6: tray applet (python -m host.gui)'
+)
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+# Fill in once v$pkgver is tagged: updpkgsums
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+
+  # Load uinput at boot (touch/pencil input injection needs it)
+  echo uinput | install -Dm644 /dev/stdin "$pkgdir/usr/lib/modules-load.d/$pkgname.conf"
+}
