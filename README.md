@@ -178,6 +178,32 @@ ranges — the same one CI installs — use
 `pip install --require-hashes -r host/requirements.lock.txt`. See
 [CONTRIBUTING.md](CONTRIBUTING.md#reproducible-builds).)
 
+#### Alternative: build and install as an Arch package
+
+Instead of the virtual environment above, `packaging/arch/PKGBUILD` builds the host
+as a normal pacman package, so it is installed to `/usr` and can be removed with
+`pacman -R view-dock`. It isn't in the AUR or any repository yet, so you build it
+from a clone:
+
+```sh
+git clone https://github.com/JamesLunaa/view-dock.git
+cd view-dock/packaging/arch
+
+# Two runtime dependencies are only in the AUR
+yay -S python-aiortc python-uinput
+
+# Run this from a shell without a Python virtual environment active
+makepkg -si
+```
+
+`makepkg` downloads the tagged release tarball named in the `PKGBUILD` (not your
+working copy) and checks its checksum, so you get that release's code. Then run
+`view-dock` (command-line log), `view-dock-tui` (terminal UI) or `view-dock-tray`
+(tray applet; needs `pyside6`). The helper scripts mentioned below, such as
+`force-connector.sh`, are in `/usr/share/view-dock/scripts/` rather than
+`host/scripts/`. USB support still needs the `-git` `usbmuxd`/`libimobiledevice`
+packages from the first step (for an iPad) or `android-tools` (for Android).
+
 #### Other distros (untested)
 
 Only Arch has been verified on real hardware. Nothing in the host code is

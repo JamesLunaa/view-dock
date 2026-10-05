@@ -132,7 +132,11 @@ Wi-Fi, Pencil pressure/hover, and Wayland support (phase 2).
 
 ## Running it
 
-On an Xorg desktop with an iPad connected by cable:
+On an Xorg desktop with an iPad connected by cable. (Installed from the Arch
+package instead of a checkout? The helper scripts are in
+`/usr/share/view-dock/scripts/` rather than `./host/scripts/`, `view-dock-tray`
+replaces the `install-desktop-entry.sh`/`launch-gui.sh` pair, and `view-dock` /
+`view-dock-tui` replace `python -m host.main` / `python -m host.ui`.)
 
 ```sh
 # 1. Automatic: on start, the host forces a spare GPU connector "connected"
