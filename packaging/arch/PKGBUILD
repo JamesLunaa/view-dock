@@ -29,8 +29,7 @@ optdepends=(
   'pyside6: tray applet (python -m host.gui)'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-# Fill in once v$pkgver is tagged: updpkgsums
-sha256sums=('SKIP')
+sha256sums=('5babf2c3baa0f5996086d52cea87a5fbb1d257694f29f309cc66b07b0ccd6d01')
 
 build() {
   cd "$pkgname-$pkgver"
@@ -43,6 +42,19 @@ package() {
 
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+
+  # Helper scripts the docs tell users to run. Kept side by side because
+  # start-dummy-display.sh finds ../xorg/dummy.conf relative to itself.
+  # launch-gui.sh and install-desktop-entry.sh are left out: they assume a
+  # repo checkout with a .venv, and the package provides `view-dock-tray`.
+  local _s
+  for _s in force-connector start-dummy-display launch-on-virtual-display; do
+    install -Dm755 "host/scripts/$_s.sh" "$pkgdir/usr/share/$pkgname/scripts/$_s.sh"
+  done
+  install -Dm644 host/xorg/dummy.conf "$pkgdir/usr/share/$pkgname/xorg/dummy.conf"
+
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 host/README.md "$pkgdir/usr/share/doc/$pkgname/host-README.md"
 
   # Load uinput at boot (touch/pencil input injection needs it)
   echo uinput | install -Dm644 /dev/stdin "$pkgdir/usr/lib/modules-load.d/$pkgname.conf"
