@@ -23,6 +23,7 @@ mode is set, same shape as a genuinely disconnected one.
 import logging
 import os
 import re
+import shutil
 import subprocess
 import time
 
@@ -48,6 +49,14 @@ _CURSOR_MAX_CONSECUTIVE_FAILURES = 120
 _AUTO_HANDOFF = os.environ.get("VIEWDOCK_AUTO_HANDOFF") == "1"
 _HANDOFF_SETTLE_S = 3.0
 _DISCONNECTED_RE = re.compile(r"^(\S+) disconnected\b")
+# After a capture failure (the X server rejects a rectangle that no longer lies
+# on the screen while a hotplug is being reconfigured), keep trying to find the
+# virtual output again for this long before giving up on the session.
+_RECOVER_TIMEOUT_S = 6.0
+_RECOVER_POLL_S = 0.2
+# If the output is still gone after this long, the desktop's display manager
+# most likely switched it off; turn it back on ourselves.
+_REENABLE_AFTER_S = 1.5
 
 
 def _spare_rank(name: str) -> tuple[int, int]:
@@ -74,6 +83,7 @@ class X11DisplayServer(DisplayServer):
         self._config: DisplayConfig | None = None
         self._forced_output: str | None = None
         self._handoff_at: float | None = None
+        self._geometry_stale = False
 
     def create_virtual_display(self, config: DisplayConfig) -> None:
         output = self.ensure_spare_output()
@@ -214,7 +224,60 @@ class X11DisplayServer(DisplayServer):
         if self._sct is None or self._monitor is None:
             raise RuntimeError("Virtual display not created; call create_virtual_display() first.")
         self._refresh_geometry_if_moved()
-        return self._sct.grab(self._monitor)
+        try:
+            return self._sct.grab(self._monitor)
+        except Exception:
+            # Seen live when a real monitor was plugged in: the rectangle we
+            # hold stopped being on the X screen, every grab failed with
+            # BadMatch, and each retry of the session hit the same stale rect.
+            logger.warning("Capture failed; re-resolving the virtual display.", exc_info=True)
+            self._recover_capture()
+            return self._sct.grab(self._monitor)
+
+    def _recover_capture(self) -> None:
+        """Wait out a display reconfiguration until the virtual output has a
+        rectangle again, re-enabling it if the desktop switched it off."""
+        deadline = time.monotonic() + _RECOVER_TIMEOUT_S
+        reenable_at = time.monotonic() + _REENABLE_AFTER_S
+        reenabled = False
+        while True:
+            try:
+                self._monitor = self._find_monitor_geometry(self._output_name)
+                self._geometry_stale = False
+                logger.info("Virtual display recovered at %s", self._monitor)
+                return
+            except RuntimeError:
+                pass
+            now = time.monotonic()
+            if now >= deadline:
+                raise RuntimeError(f"Virtual output {self._output_name} did not come back after a display change.")
+            if not reenabled and now >= reenable_at:
+                reenabled = True
+                self._reenable_output()
+            time.sleep(_RECOVER_POLL_S)
+
+    def _reenable_output(self) -> None:
+        logger.info("Re-enabling %s after it was switched off.", self._output_name)
+        command = ["xrandr", "--output", self._output_name, "--mode", self._mode_name]
+        primary = self._find_primary_output()
+        if primary is not None and primary != self._output_name:
+            command += ["--right-of", primary]
+        subprocess.run(command, check=False, capture_output=True)
+        self._tell_kscreen_output_is_enabled(primary)
+
+    def _tell_kscreen_output_is_enabled(self, primary: str | None) -> None:
+        """Re-enabling through xrandr alone leaves Plasma not drawing on the
+        output (found live: the captured region was pure black, the iPad went
+        black). Asking KDE's own display layer to enable it makes Plasma paint
+        there again; that also made the output primary, so put that back."""
+        if shutil.which("kscreen-doctor") is None:
+            return
+        subprocess.run(
+            ["kscreen-doctor", f"output.{self._output_name}.enable"],
+            check=False, capture_output=True,
+        )
+        if primary is not None and primary != self._output_name:
+            subprocess.run(["kscreen-doctor", f"output.{primary}.primary"], check=False, capture_output=True)
 
     def _draw_cursor(self, frame: np.ndarray, bgr: bool) -> None:
         if self._cursor is not None:
@@ -243,6 +306,8 @@ class X11DisplayServer(DisplayServer):
             return
         changed = self._layout_watcher.layout_changed()
         now = time.monotonic()
+        if self._geometry_stale and not changed and now - self._last_monitor_check > 0.5:
+            changed = True  # an earlier lookup failed; keep retrying until it resolves
         # `xrandr --query` costs ~75 ms here — several dropped frames if it ran
         # on a timer in the capture path — so only run it when RandR reports a
         # layout change, plus a 1 s poll while a handoff is waiting to settle.
@@ -279,8 +344,10 @@ class X11DisplayServer(DisplayServer):
             # the user may have disabled it outright. Keep the last known
             # rectangle; the next change event will resolve it again.
             logger.warning("Virtual output %s has no geometry right now.", self._output_name)
+            self._geometry_stale = True
             return
 
+        self._geometry_stale = False
         if moved != self._monitor:
             logger.info("Virtual display moved: %s -> %s", self._monitor, moved)
             self._monitor = moved
