@@ -1,6 +1,6 @@
 # Maintainer: James Luna <josecynonluna03@gmail.com>
 pkgname=view-dock
-pkgver=2.0.2
+pkgver=2.0.3
 pkgrel=1
 pkgdesc='Use an iPad or Android device as an extended second display for Linux (X11)'
 arch=('any')
@@ -29,7 +29,7 @@ optdepends=(
   'pyside6: tray applet (python -m host.gui)'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('5babf2c3baa0f5996086d52cea87a5fbb1d257694f29f309cc66b07b0ccd6d01')
+sha256sums=('3726605361523c31b4334b2662728407311274a0ce0d46ed8abbebf50c5accb6')
 
 build() {
   cd "$pkgname-$pkgver"

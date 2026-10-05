@@ -9,9 +9,13 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
 
 ## [Unreleased]
 
-Fixes only so far, so the next release is a patch: **2.0.3** (nothing added, no
-`protocol/` change, any host and app from 2.0.0 onward still interoperate). The version
-number is applied when the maintainer cuts the release.
+## [2.0.3] - 2026-10-05
+
+A fix-only release, so a patch: nothing added, no `protocol/` change, and any host and
+app from 2.0.0 onward still interoperate. The `v2.0.3` tag was cut before this section
+and the version strings (Android `versionName`, iPad `MARKETING_VERSION`,
+`pyproject.toml`) were bumped, so they were updated in a follow-up commit; builds made
+from the tag itself still report 2.0.2.
 
 ### Fixed
 - **Plugging in a real monitor while streaming no longer breaks the session (X11).**
@@ -230,7 +234,8 @@ First release.
 - Dependency and code scanning through GitHub (Dependabot updates, CodeQL,
   dependency review on pull requests).
 
-[Unreleased]: https://github.com/JamesLunaa/view-dock/compare/v2.0.2...HEAD
+[Unreleased]: https://github.com/JamesLunaa/view-dock/compare/v2.0.3...HEAD
+[2.0.3]: https://github.com/JamesLunaa/view-dock/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/JamesLunaa/view-dock/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/JamesLunaa/view-dock/compare/v1.0.4...v2.0.0
