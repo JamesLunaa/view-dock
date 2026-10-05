@@ -5,7 +5,25 @@ Notable changes to view-dock. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 **How to read this file:** each `## [X.Y.Z] - date` heading is a release that has been
-tagged, newest first. `## [Unreleased]
+tagged, newest first. `## [Unreleased]` collects changes made since the latest tag.
+
+## [Unreleased]
+
+Fixes only so far, so the next release is a patch: **2.0.3** (nothing added, no
+`protocol/` change, any host and app from 2.0.0 onward still interoperate). The version
+number is applied when the maintainer cuts the release.
+
+### Fixed
+- **Plugging in a real monitor while streaming no longer breaks the session (X11).**
+  The desktop could switch the virtual output off during the hotplug; the host kept
+  capturing a rectangle that was no longer on the screen, every grab failed with an
+  X `BadMatch` error, and each reconnect hit the same error in a loop until the client was
+  unplugged. Capture failures now re-resolve the virtual output (up to 6 s), retry a
+  failed geometry lookup until it succeeds, and re-enable the output if it was switched
+  off. On KDE the host also asks `kscreen-doctor` to enable it (plain `xrandr` left
+  Plasma not drawing on it, so the iPad showed black) and restores the previous primary
+  display. Reported working on the user's machine (iPad over USB, real monitor plugged
+  in mid-stream); no automated test covers this path.
 
 ## [2.0.2] - 2026-10-05
 
