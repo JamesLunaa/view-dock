@@ -9,6 +9,10 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
 
 ## [Unreleased]
 
+## [2.0.4](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-06
+
+Minor fix: forced connector
+
 ## [2.0.3] - 2026-10-05
 
 A fix-only release, so a patch: nothing added, no `protocol/` change, and any host and
