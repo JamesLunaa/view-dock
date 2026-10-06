@@ -51,7 +51,8 @@ if [ -z "${FORCE_PATH}" ]; then
     exit 1
 fi
 echo "Setting ${FORCE_PATH} = ${STATE} (sudo password may be required)..."
-echo "${STATE}" | sudo tee "${FORCE_PATH}" >/dev/null
+# printf, not echo: kernel 7.x rejects "unspecified" with a trailing newline (EINVAL).
+printf '%s' "${STATE}" | sudo tee "${FORCE_PATH}" >/dev/null
 
 echo "Current state: $(sudo cat "${FORCE_PATH}")"
 echo
