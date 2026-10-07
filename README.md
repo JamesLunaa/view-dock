@@ -10,7 +10,7 @@ same protocol. The host can serve **several devices at once** (up to four by
 default): each one gets its own extended monitor.
 
 <p align="center">
-  <img src="docs/demo.gif" alt="A window is dragged off an Arch Linux laptop's desktop onto an iPad beside it, then an Android phone connects over a USB cable" width="800">
+  <img src="docs/demo.gif" alt="A window is dragged off an Arch Linux laptop's desktop onto an iPad beside it, then an Android phone finds the host and up to four devices connect at once" width="800">
   <br>
   <sub>Animated illustration of the workflow, not a screen recording.</sub>
 </p>
