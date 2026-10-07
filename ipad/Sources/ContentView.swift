@@ -5,6 +5,8 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var connectionManager = ConnectionManager()
+    @StateObject private var discovery = HostDiscovery()
+    @State private var searchedAWhile = false
     @State private var hostAddress = ""
     @State private var showingAbout = false
 
@@ -21,6 +23,22 @@ struct ContentView: View {
                     Text(connectionManager.statusDescription)
                         .foregroundStyle(.white)
 
+                    // A tap is always required: anyone on the network can advertise a host,
+                    // and there is no authentication yet (see SECURITY.md), so never connect silently.
+                    ForEach(discovery.hosts) { host in
+                        Button(host.isCompatible ? "\(host.name) (\(host.address))"
+                                                 : "\(host.name) — needs a different app version") {
+                            connectionManager.connect(to: host)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!host.isCompatible)
+                    }
+                    if discovery.hosts.isEmpty {
+                        Text(discoveryHint)
+                            .foregroundStyle(.gray)
+                            .multilineTextAlignment(.center)
+                    }
+
                     TextField("Host IP address", text: $hostAddress)
                         .textFieldStyle(.roundedBorder)
                         .keyboardType(.decimalPad)
@@ -31,6 +49,14 @@ struct ContentView: View {
                         connectionManager.connectOverWifi(hostAddress: hostAddress)
                     }
                     .disabled(hostAddress.isEmpty)
+                }
+                // Browsing only while the connect screen is showing: it keeps the Wi-Fi radio busy.
+                .onAppear { discovery.start() }
+                .onDisappear { discovery.stop() }
+                .task {
+                    searchedAWhile = false
+                    try? await Task.sleep(for: .seconds(5))
+                    searchedAWhile = true
                 }
             }
         }
@@ -54,6 +80,15 @@ struct ContentView: View {
         .onAppear {
             connectionManager.start()
         }
+    }
+}
+
+extension ContentView {
+    fileprivate var discoveryHint: String {
+        if let reason = discovery.unavailableReason { return reason }
+        return searchedAWhile
+            ? "Not finding your computer? Enter its IP address below."
+            : "Searching for hosts…"
     }
 }
 

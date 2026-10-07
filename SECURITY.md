@@ -114,6 +114,10 @@ These are acknowledged weaknesses rather than disputed reports — you don't
 need to report them, though a concrete attack that goes beyond them is
 certainly worth reporting:
 
+- The host advertises `_viewdock._tcp` over mDNS (Wi-Fi discovery), and anyone on the
+  LAN can advertise the same service, so a discovered host is not a trusted one. The apps
+  never connect to a discovered host without a tap, and discovery must not be treated as
+  authentication.
 - No pairing/authentication step (a shared secret or QR-displayed token
   bound into the signaling handshake, and ideally into DTLS fingerprint
   verification).

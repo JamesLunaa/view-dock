@@ -8,8 +8,8 @@ import Network
 /// completes. Mirrors `host/main.py`'s transport selection: USB is
 /// host-initiated through the `iproxy` tunnel (see `host/transport/usb.py`),
 /// so this always starts a USB listener in the background; Wi-Fi requires
-/// the user to enter the host's address since there's no discovery yet
-/// (see TODO/TODO.md).
+/// hosts are found by `HostDiscovery` (Bonjour) and offered to the user,
+/// and the address can still be typed in.
 @MainActor
 final class ConnectionManager: ObservableObject {
     @Published private(set) var statusDescription = "Waiting for host…"
@@ -25,8 +25,13 @@ final class ConnectionManager: ObservableObject {
         Task { await listenForUsb() }
     }
 
-    func connectOverWifi(hostAddress: String) {
-        Task { await connectWifi(hostAddress: hostAddress) }
+    func connectOverWifi(hostAddress: String, port: UInt16 = 8765) {
+        Task { await connectWifi(hostAddress: hostAddress, port: port) }
+    }
+
+    /// Connects to a host picked from the discovery list.
+    func connect(to host: DiscoveredHost) {
+        connectOverWifi(hostAddress: host.address, port: host.port)
     }
 
     func stop() {
@@ -84,12 +89,12 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    private func connectWifi(hostAddress: String) async {
+    private func connectWifi(hostAddress: String, port: UInt16) async {
         do {
             let signaling = WifiSignaling()
             wifiSignaling = signaling
             statusDescription = "Connecting to \(hostAddress)…"
-            try await signaling.connect(hostAddress: hostAddress)
+            try await signaling.connect(hostAddress: hostAddress, port: port)
             try await negotiate(using: signaling)
         } catch {
             statusDescription = "Wi-Fi connect failed: \(error.localizedDescription)"

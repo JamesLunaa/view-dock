@@ -84,6 +84,20 @@ Graceful disconnect notice before closing the connection.
 only identifies which client is on the other end. `pencil_*` input kinds are
 also used for an Android stylus (`MotionEvent.TOOL_TYPE_STYLUS`).
 
+## Discovery (Wi-Fi)
+
+Not part of the message protocol: it happens before the signaling connection. The host
+advertises a DNS-SD service over mDNS (`host/transport/discovery.py`) and the apps browse
+for it, then connect to the resolved address and port as if the user had typed them.
+
+- Service type: `_viewdock._tcp` (`_viewdock._tcp.local.`), on the Wi-Fi signaling port (8765).
+- Instance name: the host's hostname.
+- TXT records: `protocol_version` (e.g. `1.2`; an app should refuse a different major) and
+  `name` (display name, the hostname).
+- Advertised on the LAN interfaces only (not loopback, Docker, libvirt, Tailscale, ...).
+- Discovery is not trust: anyone on the network can advertise this service, and there is
+  no authentication yet (see `SECURITY.md`), so apps list hosts and wait for a tap.
+
 ## Wired stream
 
 Wi-Fi sessions carry video as a WebRTC media track. A wired (USB) tunnel is a

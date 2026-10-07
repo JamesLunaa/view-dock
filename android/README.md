@@ -14,7 +14,8 @@ untested. Known limits:
 
 - Landscape only.
 - The host ignores stylus pressure for now (the app sends it).
-- No Wi-Fi discovery — type the host's IP.
+- Wi-Fi discovery (mDNS, via `NsdManager`) works on the vivo Y28 (reported); if your
+  network blocks it, type the host's IP.
 - Debug builds only; no signed release or Play Store listing yet.
 - Touch moves the host's shared pointer rather than acting as a touchscreen
   bound to the virtual display (same as the iPad).
@@ -60,7 +61,8 @@ slimmer build once the target devices are known.
 ## Connecting
 
 **Wi-Fi.** Put the device and the host on the same network, start the host,
-type the host's IP into the app and tap *Connect over Wi-Fi*.
+and tap your computer in the list the app shows (it is found automatically). If
+nothing appears, type the host's IP into the app and tap *Connect over Wi-Fi*.
 
 **USB.** Enable *Developer options → USB debugging* on the device, plug it in
 and accept the "Allow USB debugging?" prompt. With `adb` installed on the host

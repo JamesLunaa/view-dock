@@ -39,7 +39,9 @@ same wired stream, verified on an iPad Air 11" (M3).
 - No Apple Pencil / stylus pressure or hover — the host injects position and
   contact only (the Android app does send stylus pressure; the host ignores
   it for now).
-- No Wi-Fi discovery yet (the host's IP is typed into the app by hand).
+- Wi-Fi discovery (the apps list hosts on the network) works on Android (reported) but has not yet been tried
+  on an iPad; it needs a network that lets devices talk to each other (guest
+  networks and "AP isolation" block it). The manual IP field is always there as a fallback.
 - Wayland is not supported on the host yet (X11 only).
 - Android: landscape only. Keep the app in the foreground — while it is in the
   background the picture pauses, and it is meant to resume (via a fresh
@@ -326,7 +328,9 @@ your iPad (step 3) or Android device (step 4):
    `host/README.md`'s "Sizing" section.
 3. Open the view-dock app. Plug the device in by cable for USB (lower
    latency, auto-preferred when connected; on Android, USB debugging must be
-   on), or enter the host's IP address in the app for Wi-Fi.
+   on), or for Wi-Fi tap your computer in the app's list of hosts (or, if it is not
+   listed, enter the host's IP address — the GUI/TUI shows it). The host advertises
+   itself over mDNS, so a firewall must allow UDP port 5353 on the LAN.
 4. It should connect within a few seconds. Drag a window from your main
    screen onto the new extended-display area to confirm it's working.
 

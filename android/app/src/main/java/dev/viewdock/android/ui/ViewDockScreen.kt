@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -36,14 +38,20 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.viewdock.android.R
+import kotlinx.coroutines.delay
 import dev.viewdock.android.input.TouchInputForwarder
 import dev.viewdock.android.net.ConnectionManager
+import dev.viewdock.android.net.DiscoveredHost
+import dev.viewdock.android.net.HostDiscovery
 import dev.viewdock.android.net.WebRtcClient
 import dev.viewdock.android.net.WiredClient
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
+
+/** How long to search before suggesting the user type the address instead. */
+private const val SEARCH_HINT_DELAY_MS = 5_000L
 
 @Composable
 fun ViewDockScreen(connection: ConnectionManager) {
@@ -66,7 +74,9 @@ fun ViewDockScreen(connection: ConnectionManager) {
                     ConnectScreen(
                         status = status,
                         initialHost = connection.savedHostAddress,
-                        onConnect = connection::connectOverWifi,
+                        discovery = connection.discovery,
+                        onConnect = { connection.connectOverWifi(it) },
+                        onPickHost = connection::connectTo,
                     )
                     // In the corner, not in the centered column: the screen is landscape-only and
                     // that column is already close to a phone's height.
@@ -96,14 +106,52 @@ fun ViewDockScreen(connection: ConnectionManager) {
 }
 
 @Composable
-private fun ConnectScreen(status: String, initialHost: String, onConnect: (String) -> Unit) {
+private fun ConnectScreen(
+    status: String,
+    initialHost: String,
+    discovery: HostDiscovery,
+    onConnect: (String) -> Unit,
+    onPickHost: (DiscoveredHost) -> Unit,
+) {
     var host by remember { mutableStateOf(initialHost) }
+    val hosts by discovery.hosts.collectAsState()
+    val searching by discovery.searching.collectAsState()
+    // Browsing only while this screen is showing: NSD keeps the Wi-Fi radio busy.
+    DisposableEffect(discovery) {
+        discovery.start()
+        onDispose { discovery.stop() }
+    }
+    var searchedAWhile by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(SEARCH_HINT_DELAY_MS)
+        searchedAWhile = true
+    }
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(status, color = Color.White)
+        // A tap is always required: anyone on the network can advertise a host, and
+        // there is no authentication yet (see SECURITY.md), so never connect silently.
+        hosts.forEach { found ->
+            Button(onClick = { onPickHost(found) }, enabled = found.compatible) {
+                Text(
+                    if (found.compatible) "${found.title} (${found.address})"
+                    else "${found.title} — needs a different app version",
+                )
+            }
+        }
+        if (hosts.isEmpty()) {
+            Text(
+                when {
+                    !searching -> "Host discovery is unavailable. Enter its IP address below."
+                    searchedAWhile -> "Not finding your computer? Enter its IP address below."
+                    else -> "Searching for hosts…"
+                },
+                color = Color.Gray,
+            )
+        }
         OutlinedTextField(
             value = host,
             onValueChange = { host = it },

@@ -11,6 +11,7 @@ depends=(
   'python'
   'python-av'
   'python-websockets'
+  'python-zeroconf'
   'python-jsonschema'
   'python-mss'
   'python-numpy'

@@ -9,6 +9,22 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
 
 ## [Unreleased]
 
+## [2.2.0](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-07
+
+### Added
+- **Wi-Fi auto-discovery.** The host advertises itself over mDNS/Bonjour as
+  `_viewdock._tcp` (new `zeroconf` dependency; LAN interfaces only), and both apps list the
+  hosts they find on the connect screen. Tap one to connect — it never connects on its own,
+  because there is no authentication yet. The "Host IP address" field stays as a fallback,
+  and a hint suggests it after a few seconds with no hosts found. USB is unaffected. No
+  `protocol/` change (still 1.2): the service and its TXT keys are documented in
+  `protocol/PROTOCOL.md`. Android adds the `ACCESS_WIFI_STATE` and
+  `CHANGE_WIFI_MULTICAST_STATE` permissions (granted at install). Host and Android are
+  unit-tested, and reported working on the Android phone; the
+  iPad's `NWBrowser` code has only been syntax-checked and not yet run on an iPad. Needs a network that allows device-to-device multicast; guest/AP-isolated
+  networks will find nothing. Old apps work with this host, and new apps work with an old host
+  (they just find nothing and the IP field is used).
+
 ## [2.1.0](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-07
 
 ### Added

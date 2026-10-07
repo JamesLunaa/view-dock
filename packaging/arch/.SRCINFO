@@ -12,6 +12,7 @@ pkgbase = view-dock
 	depends = python
 	depends = python-av
 	depends = python-websockets
+	depends = python-zeroconf
 	depends = python-jsonschema
 	depends = python-mss
 	depends = python-numpy

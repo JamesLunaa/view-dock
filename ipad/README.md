@@ -87,7 +87,8 @@ What changed in the app for it:
 **Verified:** unplugging and replugging the cable mid-session reconnects. **Not yet re-checked
 since the wired stream was added:** Wi-Fi-only mode and the app being sent to the background.
 
-Not yet done: Wi-Fi discovery (host IP is typed in manually — no mDNS yet) and
+Wi-Fi discovery (Bonjour via `NWBrowser`; the first launch asks for Local Network access) is
+implemented but untested on a device — the typed-IP field remains as a fallback. Not yet done:
 Pencil-specific input (pressure/hover; only plain touch is forwarded today).
 
 ## About and Licenses

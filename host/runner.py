@@ -34,6 +34,7 @@ from host.displayserver import (
 from host.input.injector import InputInjector
 from host.streaming import WebRtcSession, WiredSession
 from host.transport import AdbTransport, Transport, UsbTransport, WifiListener
+from host.transport.discovery import ServiceAdvertiser
 from host.transport.usb import free_local_port
 from protocol import messages
 
@@ -166,6 +167,8 @@ class HostRunner:
         self._report(State.STARTING, "starting listeners")
         listener = WifiListener(self._wifi_port)
         await listener.start()
+        advertiser = ServiceAdvertiser(self._wifi_port)
+        await advertiser.start()
 
         acceptors = [asyncio.ensure_future(self._accept_wifi(listener))]
         if config.prefer_usb:
@@ -180,6 +183,7 @@ class HostRunner:
             for task in doomed:
                 task.cancel()
             await asyncio.gather(*doomed, return_exceptions=True)
+            await advertiser.stop()
             await listener.stop()
             await self._destroy_parked()
             self._report(State.IDLE)

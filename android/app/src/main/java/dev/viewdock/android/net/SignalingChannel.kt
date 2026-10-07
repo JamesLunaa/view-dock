@@ -45,7 +45,10 @@ class SignalingClosedException(message: String) : Exception(message)
  * Wi-Fi: the host runs the signaling server (`host/transport/wifi.py`) and this
  * connects to it directly, given the host's address on the LAN.
  */
-class WifiSignaling(private val hostAddress: String, private val port: Int = 8765) : SignalingChannel {
+/** The port the host's Wi-Fi signaling server listens on (`host/transport/wifi.py`). */
+const val DEFAULT_WIFI_PORT = 8765
+
+class WifiSignaling(private val hostAddress: String, private val port: Int = DEFAULT_WIFI_PORT) : SignalingChannel {
     private val incoming = Channel<String>(Channel.UNLIMITED)
     private var socket: WebSocketClient? = null
 
