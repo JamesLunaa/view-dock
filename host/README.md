@@ -127,8 +127,11 @@ tunnel, no Wi-Fi involved, at 60 fps by default. An iPad app build without it ke
 over WebRTC, as before. Unplugging and replugging mid-session reconnects. Not yet
 re-checked since it was added: Wi-Fi-only mode on the iPad, and the app in the background.
 
-Not yet done: adaptive bitrate from `stats` messages, mDNS discovery for
-Wi-Fi, Pencil pressure/hover, and Wayland support (phase 2).
+The host advertises itself over mDNS as `_viewdock._tcp` (`transport/discovery.py`, via
+`zeroconf`) so the apps can list it; this is optional — if it fails to start the host logs a
+warning and a typed IP still works. Allow UDP 5353 on the LAN interface if you run a firewall.
+
+Not yet done: adaptive bitrate from `stats` messages, Pencil pressure/hover, and Wayland support (phase 2).
 
 ## Running it
 

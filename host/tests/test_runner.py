@@ -147,6 +147,7 @@ def fakes():
     with (
         patch("host.runner.X11DisplayServer.cleanup_stale_virtual_outputs", return_value=[]),
         patch("host.runner.WifiListener", FakeListener),
+        patch("host.runner.ServiceAdvertiser", FakeAdvertiser),
         patch("host.runner.choose_display_server", side_effect=FakeDisplayServer),
         patch("host.runner.InputInjector", FakeInjector),
         patch("host.runner.WebRtcSession", FakeSession),
@@ -155,6 +156,19 @@ def fakes():
         patch.object(AdbTransport, "list_devices", classmethod(no_devices)),
     ):
         yield
+
+
+class FakeAdvertiser:
+    """Stands in for ServiceAdvertiser so tests never touch real multicast."""
+
+    def __init__(self, port: int) -> None:
+        pass
+
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
 
 
 async def _settle() -> None:

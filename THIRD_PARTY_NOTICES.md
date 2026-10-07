@@ -16,6 +16,7 @@ apps, typically on an in-app Licenses screen.
 | aiortc | BSD-3-Clause |
 | PyAV (`av`) | BSD-3-Clause (bundles FFmpeg and libx264, which are LGPL/GPL — compatible with this project's GPL) |
 | websockets | BSD-3-Clause |
+| zeroconf (Wi-Fi discovery) | LGPL-2.1-or-later |
 | jsonschema | MIT |
 | mss | MIT |
 | numpy | BSD-3-Clause (and others for bundled parts) |

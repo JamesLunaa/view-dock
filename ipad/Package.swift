@@ -25,6 +25,7 @@ let package = Package(
                 "Legal/AboutView.swift",
                 "Networking/ConnectionManager.swift",
                 "Networking/H264SampleBufferFactory.swift",
+                "Networking/HostDiscovery.swift",
                 "Networking/RTCPeerConnection+Async.swift",
                 "Networking/RemoteVideoView.swift",
                 "Networking/SignalingChannel.swift",
@@ -38,6 +39,7 @@ let package = Package(
                 "Protocol/Messages.swift",
                 "Networking/WebSocketFraming.swift",
                 "Networking/H264AnnexB.swift",
+                "Networking/DiscoveredHost.swift",
                 "Legal/AppInfo.swift",
             ]
         ),

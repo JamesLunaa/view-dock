@@ -23,8 +23,8 @@ import kotlinx.coroutines.withContext
  * Owns the connection lifecycle and drives [WebRtcClient] once signaling
  * completes. Mirrors the iPad app's `ConnectionManager`: USB is host-initiated
  * through the `adb forward` tunnel (see `host/transport/adb.py`), so this always
- * listens for it in the background; Wi-Fi needs the host's address entered by
- * the user since there is no discovery yet.
+ * listens for it in the background; Wi-Fi hosts are found by [discovery] (mDNS)
+ * and offered to the user; the address can still be typed in.
  */
 class ConnectionManager(application: Application) : AndroidViewModel(application) {
     private val _status = MutableStateFlow("Waiting for host…")
@@ -36,6 +36,9 @@ class ConnectionManager(application: Application) : AndroidViewModel(application
     private val prefs = application.getSharedPreferences("viewdock", 0)
     val savedHostAddress: String get() = prefs.getString(KEY_HOST, "") ?: ""
 
+    /** Hosts advertising `_viewdock._tcp`; the connect screen starts/stops browsing. */
+    val discovery = HostDiscovery(application)
+
     private var usbSignaling: UsbSignaling? = null
     private var wifiSignaling: WifiSignaling? = null
     private var usbJob: Job? = null
@@ -46,12 +49,15 @@ class ConnectionManager(application: Application) : AndroidViewModel(application
         usbJob = viewModelScope.launch { listenForUsb() }
     }
 
-    fun connectOverWifi(hostAddress: String) {
+    fun connectOverWifi(hostAddress: String, port: Int = DEFAULT_WIFI_PORT) {
         val address = hostAddress.trim()
         if (address.isEmpty() || wifiJob?.isActive == true) return
         prefs.edit().putString(KEY_HOST, address).apply()
-        wifiJob = viewModelScope.launch { connectWifi(address) }
+        wifiJob = viewModelScope.launch { connectWifi(address, port) }
     }
+
+    /** Connects to a host picked from the discovery list. */
+    fun connectTo(host: DiscoveredHost) = connectOverWifi(host.address, host.port)
 
     /** Ends the current session (or attempt) and goes back to listening for USB. */
     fun disconnect() {
@@ -63,6 +69,7 @@ class ConnectionManager(application: Application) : AndroidViewModel(application
     override fun onCleared() = teardown()
 
     private fun teardown() {
+        discovery.stop()
         usbJob?.cancel()
         wifiJob?.cancel()
         _session.value?.close()
@@ -115,8 +122,8 @@ class ConnectionManager(application: Application) : AndroidViewModel(application
         }
     }
 
-    private suspend fun connectWifi(address: String) {
-        val signaling = WifiSignaling(address)
+    private suspend fun connectWifi(address: String, port: Int) {
+        val signaling = WifiSignaling(address, port)
         wifiSignaling = signaling
         try {
             _status.value = "Connecting to $address…"
