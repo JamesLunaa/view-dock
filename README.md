@@ -6,7 +6,8 @@ you can drag windows onto — over Wi-Fi (same network) or a wired USB cable. A
 Python host app on Arch creates a virtual display, captures and streams it; a
 native iPadOS app or Android app renders the stream full-screen and forwards
 touch (and Apple Pencil / stylus) input back to the host. Both apps speak the
-same protocol.
+same protocol. The host can serve **several devices at once** (up to four by
+default): each one gets its own extended monitor.
 
 <p align="center">
   <img src="docs/demo.gif" alt="A window is dragged off an Arch Linux laptop's desktop onto an iPad beside it, then an Android phone connects over a USB cable" width="800">
@@ -25,6 +26,14 @@ the mouse cursor visible, at correct UI scale. Both Wi-Fi and USB work, with
 USB preferred automatically when a cable is plugged in, and the session
 reconnects on its own after a dropped connection instead of needing to be
 restarted.
+
+**Multiple clients are supported.** Connect an iPad and an Android device (or
+several of either), over Wi-Fi, USB or a mix. Each gets its own virtual monitor,
+capture, encoder and input device, placed to the right of the previous one. The
+limit is 4 by default; set `VIEWDOCK_MAX_CLIENTS` to change it, and extra
+clients are politely refused. A monitor is kept briefly after a disconnect so a
+reconnect gets its windows back. See `host/README.md` for details. This is
+covered by unit tests, but has not been confirmed on real devices yet.
 
 **Android is supported** (phones and tablets, Android 8.0+), tested on one
 device so far — see [Compatibility](#compatibility). Over USB it needs no
@@ -73,7 +82,7 @@ listener is not yet restricted that way — see [SECURITY.md](SECURITY.md).
 
 **Authenticated: no, not at all.** There is no pairing step, no token, and
 no password. The signaling handshake that sets the session up is plain
-`ws://` with no TLS, and the host accepts the first client that completes
+`ws://` with no TLS, and the host accepts any client that completes
 it. Over Wi-Fi the host listens on `0.0.0.0:8765`, so on a network with a
 hostile device present, that device could connect ahead of your iPad and
 get a live view of the extended display plus the ability to move and click
