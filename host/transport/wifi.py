@@ -21,6 +21,9 @@ from websockets.asyncio.server import ServerConnection, serve
 from host.transport.base import Transport
 
 
+DEFAULT_PORT = 8765
+
+
 class WifiConnection(Transport):
     """One accepted client connection."""
 
@@ -53,7 +56,7 @@ class WifiConnection(Transport):
 
 
 class WifiListener:
-    def __init__(self, port: int = 8765) -> None:
+    def __init__(self, port: int = DEFAULT_PORT) -> None:
         self._port = port
         self._server: websockets.asyncio.server.Server | None = None
         self._accepted: asyncio.Queue[WifiConnection] = asyncio.Queue()

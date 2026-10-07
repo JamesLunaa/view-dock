@@ -9,6 +9,8 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
 
 ## [Unreleased]
 
+## [2.1.0](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-07
+
 ### Added
 - **Several clients at once (host).** One host can now serve any mix of iPads and
   Android devices over Wi-Fi and USB at the same time. Each client gets its own
@@ -23,6 +25,9 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
   clients have not been checked.
 
 ### Changed
+- The host window and terminal UI now show the machine's Wi-Fi address and port (for
+  example `172.16.1.9 (port 8765)`), so you know what to type into the app's "Connect over
+  Wi-Fi" field. Docker, libvirt, Tailscale and similar interfaces are left out.
 - The host no longer switches between Wi-Fi and USB mid-wait: it listens on both at
   once, and every attached USB device gets its own tunnel (per-device `iproxy -u` /
   `adb -s`).
