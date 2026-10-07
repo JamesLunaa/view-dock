@@ -61,8 +61,11 @@ local network. There is no authentication of any kind.**
 ### What is not protected
 
 - **No authentication, no pairing.** Neither side proves who it is. The host
-  accepts the first client that completes the signaling handshake
-  (`host/transport/wifi.py` — "first connection wins").
+  accepts every client that completes the signaling handshake, up to
+  `VIEWDOCK_MAX_CLIENTS` (default 4) at once (`host/runner.py`). Several
+  simultaneous sessions mean several unauthenticated peers can each hold a
+  live view of their own virtual monitor and inject input at the same time,
+  and a stranger who connects first can fill the slots a real device needs.
 - **Signaling is plaintext `ws://`.** The SDP offer/answer exchange that
   bootstraps the session has no TLS and no origin checks. Over Wi-Fi the
   host listens on `0.0.0.0:8765`, reachable from anywhere on the LAN.

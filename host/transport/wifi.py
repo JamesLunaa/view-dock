@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 James Luna
 
-"""Wi-Fi transport: direct socket connection to the iPad over the LAN.
+"""Wi-Fi transport: direct socket connections from clients over the LAN.
 
-Runs a WebSocket server that the iPad connects to for WebRTC signaling (SDP
-offer/answer exchange). Discovery is out of scope for this phase — the iPad
-app is pointed at the host's IP directly; mDNS/Bonjour advertising can be
-layered on later without changing this class's interface.
+`WifiListener` runs one WebSocket server that clients connect to; every
+connection it accepts becomes its own `WifiConnection`, a `Transport` the
+session code uses for WebRTC signaling (SDP offer/answer exchange) exactly as
+it would any other. Any number of clients can be connected at once — whether
+to admit another is the caller's decision (see `HostRunner`), not the
+listener's. Discovery is a separate concern: mDNS advertising layers on top of
+the listener without changing it.
 """
 
 import asyncio
@@ -18,47 +21,60 @@ from websockets.asyncio.server import ServerConnection, serve
 from host.transport.base import Transport
 
 
-class WifiTransport(Transport):
+class WifiConnection(Transport):
+    """One accepted client connection."""
+
+    def __init__(self, websocket: ServerConnection) -> None:
+        self._websocket = websocket
+
+    @property
+    def label(self) -> str:
+        remote = self._websocket.remote_address
+        return f"Wi-Fi {remote[0]}" if remote else "Wi-Fi"
+
+    async def is_available(self) -> bool:
+        return not self.closed
+
+    @property
+    def closed(self) -> bool:
+        return self._websocket.close_code is not None
+
+    async def connect(self) -> None:
+        """Already connected: the client dialed in."""
+
+    async def disconnect(self) -> None:
+        await self._websocket.close()
+
+    async def send_signal(self, message: dict) -> None:
+        await self._websocket.send(json.dumps(message))
+
+    async def receive_signal(self) -> dict:
+        return json.loads(await self._websocket.recv())
+
+
+class WifiListener:
     def __init__(self, port: int = 8765) -> None:
         self._port = port
         self._server: websockets.asyncio.server.Server | None = None
-        self._connection: ServerConnection | None = None
-        self._connected = asyncio.Event()
+        self._accepted: asyncio.Queue[WifiConnection] = asyncio.Queue()
 
-    async def is_available(self) -> bool:
-        # Wi-Fi is always a candidate; actual reachability is only known once
-        # an iPad connects to the signaling server in connect().
-        return True
-
-    async def connect(self) -> None:
+    async def start(self) -> None:
         self._server = await serve(self._on_connect, "0.0.0.0", self._port)
-        await self._connected.wait()
 
-    async def disconnect(self) -> None:
-        if self._connection is not None:
-            await self._connection.close()
-            self._connection = None
-        if self._server is not None:
-            self._server.close()
-            await self._server.wait_closed()
-            self._server = None
-        self._connected.clear()
+    async def accept(self) -> WifiConnection:
+        """Block until the next client connects."""
+        return await self._accepted.get()
 
-    async def send_signal(self, message: dict) -> None:
-        if self._connection is None:
-            raise RuntimeError("No iPad connected.")
-        await self._connection.send(json.dumps(message))
-
-    async def receive_signal(self) -> dict:
-        if self._connection is None:
-            raise RuntimeError("No iPad connected.")
-        raw = await self._connection.recv()
-        return json.loads(raw)
+    async def stop(self) -> None:
+        if self._server is None:
+            return
+        # close() also closes every open client connection.
+        self._server.close()
+        await self._server.wait_closed()
+        self._server = None
 
     async def _on_connect(self, websocket: ServerConnection) -> None:
-        # Single iPad client at a time; first connection wins. Stay alive for
-        # the connection's lifetime so send_signal/receive_signal can use it
-        # from elsewhere in the session while this handler just holds it open.
-        self._connection = websocket
-        self._connected.set()
+        self._accepted.put_nowait(WifiConnection(websocket))
+        # The connection closes when this handler returns, so stay alive for
+        # its lifetime while the session uses it from elsewhere.
         await websocket.wait_closed()

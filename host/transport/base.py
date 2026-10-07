@@ -15,6 +15,11 @@ class Transport(ABC):
     # transports that expose `send_message`/`receive_message` may set it.
     supports_wired_stream = False
 
+    @property
+    def label(self) -> str:
+        """Short human-readable name for this connection, for status displays."""
+        return type(self).__name__
+
     @abstractmethod
     async def is_available(self) -> bool:
         """Whether this transport currently has a reachable iPad."""

@@ -46,12 +46,12 @@ events received back from the device.
 - `config.py` — runtime configuration (virtual display resolution/refresh,
   transport preference) and `IPAD_PRESETS`, logical-point resolutions for
   current iPad models.
-- `runner.py` — `HostRunner`: the transport → virtual display → WebRTC
-  session lifecycle, pulled out of `main.py` so it can report state
-  (idle/starting/waiting/connected/stopping) to a caller instead of only a
-  log stream. `main.py`, `ui/`, and `gui/` all drive the same `HostRunner`.
-  Also switches from Wi-Fi to USB mid-session if a cable shows up after a
-  session already started on Wi-Fi — `choose_transport()` only checks once.
+- `runner.py` — `HostRunner`: listens on Wi-Fi and on every attached USB
+  device at once, and gives each admitted client its own virtual display,
+  input device and session (see "Several clients at once" below). Pulled
+  out of `main.py` so it can report state (idle/starting/waiting/connected/
+  stopping, plus the connected clients' labels) to a caller instead of only
+  a log stream. `main.py`, `ui/`, and `gui/` all drive the same `HostRunner`.
 - `presets.py` — the device-resolution preset list (built from
   `config.IPAD_PRESETS`), shared by `ui/` and `gui/` so they never drift.
 - `async_loop_thread.py` — runs `HostRunner`'s asyncio loop on a background
@@ -338,13 +338,46 @@ use the slower RGB route.
 For Wi-Fi, `VIEWDOCK_TARGET_FPS=60` raises the WebRTC rate (more CPU and
 bandwidth; the adaptive bitrate still applies).
 
+## Several clients at once
+
+Any mix of iPads and Android devices, over Wi-Fi and USB, can be connected
+together; each gets its **own** virtual monitor, placed right of the previous
+one, and its own input device. Nothing is shared between clients except the
+host's CPU.
+
+- **Cap:** `VIEWDOCK_MAX_CLIENTS` (default `4`). Every client is a capture
+  plus a continuously running H.264 encoder, so the cap is really a CPU
+  budget — lower it on a weak machine. A Wi-Fi client past the cap is sent a
+  `bye` and disconnected; a USB device just waits for a free slot and connects
+  when one opens.
+- **Spare outputs:** each monitor needs its own free GPU output (see "Real
+  GPU output on an Xorg desktop"). With the one-output setup only one client
+  can have a monitor; a client that can't get one is sent a `bye` and the
+  others carry on. The host forces further disconnected outputs on by itself
+  (one `pkexec` / `sudo -n` prompt each) unless they were forced already.
+- **Disconnect frees the monitor** after `VIEWDOCK_DISPLAY_LINGER_S` seconds
+  (default `15`; `0` = immediately). Within that time a reconnecting client
+  takes the monitor back, so windows left on it are still there after a
+  dropped Wi-Fi or a replugged cable.
+- **USB:** devices are told apart by UDID / adb serial, each with its own
+  tunnel port, so several can be plugged in together.
+- **Same size for everyone:** all clients get the configured display size;
+  per-client sizes aren't supported yet.
+- **WebRTC bitrate is shared:** the adaptive-bitrate setting is process-wide
+  (`streaming/encoder_tuning.py`), so several *Wi-Fi* clients adapt together
+  to whichever reports the worst network. The USB wired stream has its own
+  encoder per client and doesn't have this coupling.
+- **Input:** each client's input is a separate virtual touch device. It has
+  not been tested with more than one real device, so check where a second
+  client's touches land before relying on it.
+
 ## Reconnecting after a drop
 
 Unplugging the cable, killing the app, or any other disconnect that never
-sends a clean `bye` loops the session back to waiting for a new connection
-instead of tearing the whole thing down — the virtual display and input
-injector stay up, so reconnecting (replugging, reopening the app) doesn't
-need the UI restarted. Detection isn't instant: it rides aioice's ICE
+sends a clean `bye` frees that client's slot and, for a USB device that is
+still plugged in, reconnects it automatically once the app is open again. The
+virtual display is kept for a short while (see above), so reconnecting
+(replugging, reopening the app) doesn't need the UI restarted. Detection isn't instant: it rides aioice's ICE
 consent-freshness checks (RFC 7675), tuned down from aioice's own defaults
 (~30s) via `VIEWDOCK_ICE_CONSENT_INTERVAL` (default `1.0`, seconds between
 checks) and `VIEWDOCK_ICE_CONSENT_FAILURES` (default `2`, consecutive misses
@@ -362,8 +395,8 @@ necessarily break anything, since the same video/data can keep flowing over
 Wi-Fi (confirmed live: it kept streaming for minutes after an unplug).
 That's a reasonable feature on its own, but connecting over USB specifically
 usually means you want unplugging it to mean "disconnected." `HostRunner`
-polls the device's physical USB presence while connected via USB and forces
-the session closed the instant it disappears, regardless of whether the
+polls which USB devices are attached and forces that device's session
+closed the instant it disappears, regardless of whether the
 WebRTC connection itself is still technically alive.
 
 ## Troubleshooting

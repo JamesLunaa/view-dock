@@ -103,10 +103,24 @@ ANDROID_PRESETS: dict[str, tuple[int, int]] = {
 }
 
 
+# Each client costs a virtual monitor, a screen capture and an H.264 encoder
+# running continuously, so the cap is mostly about CPU. Override with
+# VIEWDOCK_MAX_CLIENTS.
+DEFAULT_MAX_CLIENTS = 4
+
+
+def max_clients_from_env() -> int:
+    value = int(os.environ.get("VIEWDOCK_MAX_CLIENTS", DEFAULT_MAX_CLIENTS))
+    if value < 1:
+        raise ValueError(f"VIEWDOCK_MAX_CLIENTS must be at least 1, got {value}")
+    return value
+
+
 @dataclass
 class HostConfig:
     display: DisplayConfig
     prefer_usb: bool = True
+    max_clients: int = DEFAULT_MAX_CLIENTS
 
     @classmethod
     def default(cls) -> "HostConfig":
@@ -125,4 +139,4 @@ class HostConfig:
             refresh_hz=int(os.environ.get("VIEWDOCK_DISPLAY_REFRESH_HZ", DisplayConfig.refresh_hz)),
             capture_scale=capture_scale,
         )
-        return cls(display=display)
+        return cls(display=display, max_clients=max_clients_from_env())

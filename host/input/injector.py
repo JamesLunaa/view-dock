@@ -16,7 +16,7 @@ _UP_KINDS = {messages.INPUT_KIND_TOUCH_UP, messages.INPUT_KIND_PENCIL_UP}
 
 
 class InputInjector:
-    def __init__(self, display: DisplayConfig) -> None:
+    def __init__(self, display: DisplayConfig, name: str = "view-dock-ipad") -> None:
         self._display = display
         # capture_width/capture_height, not width/height: uinput's absolute
         # range must match the real X11 screen pixel coordinates the shared
@@ -29,7 +29,7 @@ class InputInjector:
                 uinput.ABS_X + (0, display.capture_width, 0, 0),
                 uinput.ABS_Y + (0, display.capture_height, 0, 0),
             ],
-            name="view-dock-ipad",
+            name=name,
         )
 
     def handle_input_event(self, event: dict) -> None:

@@ -9,6 +9,29 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
 
 ## [Unreleased]
 
+### Added
+- **Several clients at once (host).** One host can now serve any mix of iPads and
+  Android devices over Wi-Fi and USB at the same time. Each client gets its own
+  virtual monitor (placed right of the previous one), capture, encoder and input
+  device, up to `VIEWDOCK_MAX_CLIENTS` (default 4). A Wi-Fi client past the cap is sent
+  a `bye` and disconnected; a USB device waits for a free slot. A client's monitor is
+  kept for `VIEWDOCK_DISPLAY_LINGER_S` seconds (default 15) after it leaves so a
+  reconnect gets it back. No `protocol/` change and no app change: existing apps work
+  against this host unchanged. Each extra client needs its own spare GPU output.
+  Unit-tested with fakes, and reported working with an iPad and an Android phone
+  connected together over USB. Touch placement on the second monitor and three or more
+  clients have not been checked.
+
+### Changed
+- The host no longer switches between Wi-Fi and USB mid-wait: it listens on both at
+  once, and every attached USB device gets its own tunnel (per-device `iproxy -u` /
+  `adb -s`).
+- Expected display-layout hiccups (another client's monitor appearing) are logged as
+  info instead of warnings with tracebacks, and the tray app only pops up notifications
+  for errors, so normal connects no longer look alarming.
+- A client that cannot get a virtual monitor (no spare output) is now refused with a
+  `bye` while the rest keep streaming, instead of stopping the whole host.
+
 ## [2.0.4](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-06
 
 Minor fix: forced connector
