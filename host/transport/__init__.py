@@ -4,6 +4,6 @@
 from .adb import AdbTransport
 from .base import Transport
 from .usb import UsbTransport
-from .wifi import WifiTransport
+from .wifi import WifiConnection, WifiListener
 
-__all__ = ["AdbTransport", "Transport", "UsbTransport", "WifiTransport"]
+__all__ = ["AdbTransport", "Transport", "UsbTransport", "WifiConnection", "WifiListener"]

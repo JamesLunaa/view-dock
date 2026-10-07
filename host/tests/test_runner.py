@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 James Luna
 
-"""Covers the bug hit live in host/ui/: pressing stop while HostRunner.run()
-is still blocked inside transport.connect() (e.g. Wi-Fi waiting for an iPad
-to show up) did nothing, because nothing was awaiting the stop-request event
-yet. request_stop() must be effective at that point too, not just once a
-session is already established.
+"""HostRunner with several clients at once: each admitted client gets its own
+virtual display, injector and session; the host refuses clients past the cap;
+a monitor outlives its client briefly so a reconnect gets it back; one
+client's failure leaves the others streaming; and `request_stop()` works at
+any moment, including before any client has shown up.
+
+Everything below the runner is faked — no sockets, no xrandr, no uinput.
 """
 
 import asyncio
@@ -13,192 +15,112 @@ from unittest.mock import patch
 
 import pytest
 
-from host.config import HostConfig
 from host.runner import HostRunner, State
 from host.transport.adb import AdbTransport
 from host.transport.base import Transport
-from host.transport.wifi import WifiTransport
+from host.transport.usb import UsbTransport
 
 
-@pytest.fixture(autouse=True)
-def no_real_adb_device():
-    """The runner also probes `adb devices`; keep these tests independent of
-    whether an Android phone happens to be plugged into the machine."""
+class FakeListener:
+    """Stands in for WifiListener; `arrive()` plays a client connecting."""
 
-    async def none_attached(_self) -> bool:
-        return False
+    instance: "FakeListener"
 
-    with patch.object(AdbTransport, "is_available", none_attached):
-        yield
+    def __init__(self, _port) -> None:
+        self.queue: asyncio.Queue = asyncio.Queue()
+        self.started = self.stopped = False
+        FakeListener.instance = self
+
+    async def start(self) -> None:
+        self.started = True
+
+    async def stop(self) -> None:
+        self.stopped = True
+
+    async def accept(self):
+        return await self.queue.get()
+
+    def arrive(self, transport: "FakeTransport") -> None:
+        self.queue.put_nowait(transport)
 
 
-class HangingTransport(Transport):
-    """Never resolves connect() on its own — the shape of WifiTransport
-    waiting for an iPad that hasn't shown up yet."""
+class FakeTransport(Transport):
+    supports_wired_stream = False
 
-    def __init__(self) -> None:
+    def __init__(self, name: str = "client") -> None:
+        self._name = name
         self.disconnected = False
+        self.signals: list[dict] = []
+
+    @property
+    def label(self) -> str:
+        return self._name
 
     async def is_available(self) -> bool:
         return True
 
     async def connect(self) -> None:
-        await asyncio.Event().wait()  # blocks forever unless cancelled
+        pass
 
     async def disconnect(self) -> None:
         self.disconnected = True
 
     async def send_signal(self, message: dict) -> None:
-        raise NotImplementedError
+        self.signals.append(message)
 
     async def receive_signal(self) -> dict:
         raise NotImplementedError
 
 
-def test_request_stop_during_connect_returns_to_idle():
-    async def body():
-        transport = HangingTransport()
-        states: list[State] = []
-
-        runner = HostRunner(display_config=None, on_status=lambda e: states.append(e.state))
-
-        async def fake_choose_transport(_config):
-            return transport
-
-        with (
-            patch("host.runner.X11DisplayServer.cleanup_stale_virtual_outputs", return_value=[]),
-            patch("host.runner.choose_transport", side_effect=fake_choose_transport),
-        ):
-            run_task = asyncio.ensure_future(runner.run())
-            await asyncio.sleep(0.05)  # let it reach the blocked connect()
-            runner.request_stop()
-            await asyncio.wait_for(run_task, timeout=1)
-
-        assert transport.disconnected
-        assert states[-1] is State.IDLE
-        assert State.STOPPING in states
-
-    asyncio.run(body())
-
-
-class FakeUsbTransport(Transport):
-    """Connects instantly — stands in for a real UsbTransport once a cable
-    is plugged in, without shelling out to iproxy/idevice_id."""
-
-    instances: list["FakeUsbTransport"] = []
+class FakeDisplayServer:
+    created = 0
+    destroyed = 0
+    fail_next = False
+    instances: list["FakeDisplayServer"] = []
 
     def __init__(self) -> None:
-        self.connected = False
-        self.disconnected = False
-        FakeUsbTransport.instances.append(self)
-
-    async def is_available(self) -> bool:
-        return True
-
-    async def connect(self) -> None:
-        self.connected = True
-
-    async def disconnect(self) -> None:
-        self.disconnected = True
-
-    async def send_signal(self, message: dict) -> None:
-        raise NotImplementedError
-
-    async def receive_signal(self) -> dict:
-        raise NotImplementedError
-
-
-def test_switches_from_wifi_to_usb_when_cable_appears_mid_wait():
-    """Covers the bug reported live: starting with no iPad plugged in falls
-    back to Wi-Fi, and plugging in USB afterward did nothing until the whole
-    session was restarted — _wait_until_usb_available() should catch this
-    instead of choose_transport() only ever being consulted once."""
-
-    async def body():
-        FakeUsbTransport.instances.clear()
-        wifi = WifiTransport()
-        states: list[tuple[State, str]] = []
-
-        runner = HostRunner(
-            display_config=None,
-            on_status=lambda e: states.append((e.state, e.detail)),
-        )
-
-        async def fake_choose_transport(_config):
-            return wifi
-
-        async def hang_forever(*_args, **_kwargs):
-            await asyncio.Event().wait()
-
-        async def usb_already_available(*_args, **_kwargs):
-            return None
-
-        with (
-            patch.object(WifiTransport, "connect", side_effect=hang_forever, autospec=True),
-            patch.object(WifiTransport, "disconnect", autospec=True),
-            patch("host.runner.choose_transport", side_effect=fake_choose_transport),
-            patch("host.runner._wait_until_usb_available", side_effect=usb_already_available),
-            patch("host.runner.UsbTransport", FakeUsbTransport),
-        ):
-            config = HostConfig(display=None)
-            result = await asyncio.wait_for(runner._establish_transport(config), timeout=1)
-
-        assert result is not None
-        transport, transport_name = result
-        assert isinstance(transport, FakeUsbTransport)
-        assert transport_name == "FakeUsbTransport"
-        assert transport.connected
-        assert any(state is State.STARTING and "switching from Wi-Fi" in detail for state, detail in states)
-
-    asyncio.run(body())
-
-
-class FakeDisplayServerForRunner:
-    """Tracks create/destroy calls so the test can assert the virtual
-    display is brought up exactly once and torn down exactly once — not
-    recreated on every reconnect."""
-
-    def __init__(self) -> None:
-        self.created = 0
-        self.destroyed = 0
+        self.is_up = False
+        FakeDisplayServer.instances.append(self)
 
     def create_virtual_display(self, config) -> None:
-        self.created += 1
+        if FakeDisplayServer.fail_next:
+            FakeDisplayServer.fail_next = False
+            raise RuntimeError("No spare output available")
+        self.is_up = True
+        FakeDisplayServer.created += 1
 
     def destroy_virtual_display(self) -> None:
-        self.destroyed += 1
+        self.is_up = False
+        FakeDisplayServer.destroyed += 1
 
     def capture_frame(self):
         raise NotImplementedError
 
 
-class FakeInputInjectorForRunner:
-    instances: list["FakeInputInjectorForRunner"] = []
+class FakeInjector:
+    instances: list["FakeInjector"] = []
 
-    def __init__(self, _config) -> None:
+    def __init__(self, _config, name="x") -> None:
+        self.name = name
         self.closed = False
-        FakeInputInjectorForRunner.instances.append(self)
+        FakeInjector.instances.append(self)
 
     def close(self) -> None:
         self.closed = True
 
 
 class FakeSession:
-    """Stands in for WebRtcSession: start() succeeds instantly, and
-    wait_closed() resolves only when the test calls simulate_disconnect()
-    (mirroring WebRtcSession._on_connection_state_change firing on its own,
-    with nobody having called request_stop())."""
-
     instances: list["FakeSession"] = []
 
-    def __init__(self, _display_server, _input_injector, _display_config) -> None:
-        self.started = False
+    def __init__(self, display_server, input_injector, _display_config) -> None:
+        self.display_server = display_server
+        self.input_injector = input_injector
         self.closed = False
         self._closed_event = asyncio.Event()
         FakeSession.instances.append(self)
 
     async def start(self, _transport) -> None:
-        self.started = True
+        pass
 
     async def wait_closed(self) -> None:
         await self._closed_event.wait()
@@ -211,247 +133,299 @@ class FakeSession:
         self._closed_event.set()
 
 
-def test_disconnect_reconnects_without_tearing_down_display():
-    """Covers the actual feature request: unplugging/closing the app should
-    drop back to 'waiting for device', not require pressing Start again — the
-    virtual display and input injector should stay up across a reconnect,
-    only torn down on an explicit request_stop()."""
+@pytest.fixture(autouse=True)
+def fakes():
+    """Fake every layer below the runner and reset the shared bookkeeping."""
+    FakeDisplayServer.created = FakeDisplayServer.destroyed = 0
+    FakeDisplayServer.fail_next = False
+    for fake in (FakeDisplayServer, FakeInjector, FakeSession):
+        fake.instances.clear()
+
+    async def no_devices(_cls) -> list[str]:
+        return []
+
+    with (
+        patch("host.runner.X11DisplayServer.cleanup_stale_virtual_outputs", return_value=[]),
+        patch("host.runner.WifiListener", FakeListener),
+        patch("host.runner.choose_display_server", side_effect=FakeDisplayServer),
+        patch("host.runner.InputInjector", FakeInjector),
+        patch("host.runner.WebRtcSession", FakeSession),
+        patch("host.runner.WiredSession", FakeSession),
+        patch.object(UsbTransport, "list_devices", classmethod(no_devices)),
+        patch.object(AdbTransport, "list_devices", classmethod(no_devices)),
+    ):
+        yield
+
+
+async def _settle() -> None:
+    await asyncio.sleep(0.05)
+
+
+def _runner(states=None, **kwargs) -> HostRunner:
+    kwargs.setdefault("display_linger_s", 0)
+    return HostRunner(
+        display_config=None,
+        on_status=(lambda e: states.append(e)) if states is not None else None,
+        **kwargs,
+    )
+
+
+def test_request_stop_before_any_client_returns_to_idle():
+    """The original UI bug: stop pressed while nothing is connected yet must
+    still end the run."""
 
     async def body():
-        FakeUsbTransport.instances.clear()
-        FakeInputInjectorForRunner.instances.clear()
-        FakeSession.instances.clear()
-        display_server = FakeDisplayServerForRunner()
-        states: list[tuple[State, str]] = []
+        states: list = []
+        runner = _runner(states)
+        run_task = asyncio.ensure_future(runner.run())
+        await _settle()
+        runner.request_stop()
+        await asyncio.wait_for(run_task, timeout=1)
 
-        runner = HostRunner(
-            display_config=None,
-            on_status=lambda e: states.append((e.state, e.detail)),
-        )
+        assert FakeListener.instance.started and FakeListener.instance.stopped
+        assert states[-1].state is State.IDLE
+        assert State.STOPPING in [e.state for e in states]
 
-        async def fake_choose_transport(_config):
-            return FakeUsbTransport()
+    asyncio.run(body())
 
+
+def test_two_clients_stream_at_once_each_with_its_own_display():
+    async def body():
+        states: list = []
+        runner = _runner(states)
+        run_task = asyncio.ensure_future(runner.run())
+        await _settle()
+
+        FakeListener.instance.arrive(FakeTransport("Wi-Fi 10.0.0.2"))
+        FakeListener.instance.arrive(FakeTransport("Wi-Fi 10.0.0.3"))
+        await _settle()
+
+        assert len(FakeSession.instances) == 2
+        first, second = FakeSession.instances
+        assert first.display_server is not second.display_server
+        assert first.input_injector is not second.input_injector
+        assert first.input_injector.name != second.input_injector.name
+        assert FakeDisplayServer.created == 2
+        assert sorted(runner.client_labels) == ["Wi-Fi 10.0.0.2", "Wi-Fi 10.0.0.3"]
+        assert states[-1].state is State.CONNECTED
+        assert len(states[-1].clients) == 2
+
+        runner.request_stop()
+        await asyncio.wait_for(run_task, timeout=1)
+        assert FakeDisplayServer.destroyed == 2
+        assert all(injector.closed for injector in FakeInjector.instances)
+
+    asyncio.run(body())
+
+
+def test_client_past_the_cap_is_refused_without_getting_a_display():
+    async def body():
+        runner = _runner(max_clients=1)
+        run_task = asyncio.ensure_future(runner.run())
+        await _settle()
+
+        listener = FakeListener.instance
+        listener.arrive(FakeTransport("first"))
+        await _settle()
+        refused = FakeTransport("second")
+        listener.arrive(refused)
+        await _settle()
+
+        assert refused.signals == [{"type": "bye", "reason": "error"}]
+        assert refused.disconnected
+        assert len(FakeSession.instances) == 1
+        assert FakeDisplayServer.created == 1
+        assert runner.client_labels == ["first"], "the admitted client must be unaffected"
+
+        runner.request_stop()
+        await asyncio.wait_for(run_task, timeout=1)
+
+    asyncio.run(body())
+
+
+def test_leaving_client_frees_its_display_and_its_slot():
+    async def body():
+        runner = _runner(max_clients=1)
+        run_task = asyncio.ensure_future(runner.run())
+        await _settle()
+
+        listener = FakeListener.instance
+        listener.arrive(FakeTransport("a"))
+        await _settle()
+        FakeSession.instances[0].simulate_disconnect()
+        await _settle()
+
+        assert FakeDisplayServer.destroyed == 1  # linger is 0 in these tests
+        assert runner.client_labels == []
+
+        listener.arrive(FakeTransport("b"))  # the slot is free again
+        await _settle()
+        assert runner.client_labels == ["b"]
+
+        runner.request_stop()
+        await asyncio.wait_for(run_task, timeout=1)
+
+    asyncio.run(body())
+
+
+def test_reconnect_within_the_linger_reuses_the_display():
+    """A dropped-and-reconnected client must get its monitor (and the windows
+    on it) back rather than a freshly created one."""
+
+    async def body():
+        runner = _runner(display_linger_s=30)
+        run_task = asyncio.ensure_future(runner.run())
+        await _settle()
+
+        listener = FakeListener.instance
+        listener.arrive(FakeTransport("a"))
+        await _settle()
+        FakeSession.instances[0].simulate_disconnect()
+        await _settle()
+        assert FakeDisplayServer.destroyed == 0, "kept for the linger"
+
+        listener.arrive(FakeTransport("a again"))
+        await _settle()
+        assert FakeDisplayServer.created == 1, "no second monitor for the reconnect"
+        assert FakeSession.instances[1].display_server is FakeSession.instances[0].display_server
+
+        runner.request_stop()
+        await asyncio.wait_for(run_task, timeout=1)
+        assert FakeDisplayServer.destroyed == 1
+
+    asyncio.run(body())
+
+
+def test_parked_display_is_destroyed_when_the_linger_runs_out():
+    async def body():
+        runner = _runner(display_linger_s=0.05)
+        run_task = asyncio.ensure_future(runner.run())
+        await _settle()
+
+        FakeListener.instance.arrive(FakeTransport("a"))
+        await _settle()
+        FakeSession.instances[0].simulate_disconnect()
+        await asyncio.sleep(0.2)
+        assert FakeDisplayServer.destroyed == 1
+
+        runner.request_stop()
+        await asyncio.wait_for(run_task, timeout=1)
+
+    asyncio.run(body())
+
+
+def test_one_client_failing_to_get_a_display_leaves_the_other_streaming():
+    async def body():
+        runner = _runner()
+        run_task = asyncio.ensure_future(runner.run())
+        await _settle()
+
+        listener = FakeListener.instance
+        listener.arrive(FakeTransport("good"))
+        await _settle()
+        FakeDisplayServer.fail_next = True  # e.g. no spare output left
+        failing = FakeTransport("bad")
+        listener.arrive(failing)
+        await _settle()
+
+        assert failing.signals == [{"type": "bye", "reason": "error"}]
+        assert failing.disconnected
+        assert runner.client_labels == ["good"]
+        assert not run_task.done()
+
+        runner.request_stop()
+        await asyncio.wait_for(run_task, timeout=1)
+
+    asyncio.run(body())
+
+
+def test_disconnect_client_ends_only_that_client():
+    async def body():
+        runner = _runner()
+        run_task = asyncio.ensure_future(runner.run())
+        await _settle()
+
+        listener = FakeListener.instance
+        listener.arrive(FakeTransport("a"))
+        listener.arrive(FakeTransport("b"))
+        await _settle()
+
+        assert runner.disconnect_client("a")
+        await _settle()
+        assert runner.client_labels == ["b"]
+        assert not runner.disconnect_client("nobody")
+
+        runner.request_stop()
+        await asyncio.wait_for(run_task, timeout=1)
+
+    asyncio.run(body())
+
+
+class FakeUsbDevice(FakeTransport):
+    """What `UsbTransport` is to the runner: built per device, connect()s, and
+    the class lists which serials are plugged in."""
+
+    plugged_in: list[str] = []
+    built: list["FakeUsbDevice"] = []
+
+    def __init__(self, local_port: int, serial: str) -> None:
+        super().__init__(f"USB {serial}")
+        self.serial = serial
+        self.local_port = local_port
+        FakeUsbDevice.built.append(self)
+
+    @classmethod
+    async def list_devices(cls) -> list[str]:
+        return list(cls.plugged_in)
+
+
+def test_usb_devices_are_served_per_device_and_stop_when_unplugged():
+    async def body():
+        FakeUsbDevice.plugged_in = ["PHONE", "TABLET"]
+        FakeUsbDevice.built.clear()
+        runner = _runner()
         with (
-            patch("host.runner.X11DisplayServer.cleanup_stale_virtual_outputs", return_value=[]),
-            patch("host.runner.choose_transport", side_effect=fake_choose_transport),
-            patch("host.runner.choose_display_server", return_value=display_server),
-            patch("host.runner.InputInjector", FakeInputInjectorForRunner),
-            patch("host.runner.WebRtcSession", FakeSession),
+            patch("host.runner.UsbTransport", FakeUsbDevice),
+            patch("host.runner._USB_POLL_S", 0.02),
         ):
             run_task = asyncio.ensure_future(runner.run())
-            await asyncio.sleep(0.05)  # let the first session connect
+            await asyncio.sleep(0.2)
+            assert sorted(runner.client_labels) == ["USB PHONE", "USB TABLET"]
+            assert len({d.local_port for d in FakeUsbDevice.built}) == len(FakeUsbDevice.built), (
+                "each device needs its own tunnel port"
+            )
 
-            assert len(FakeSession.instances) == 1
-            assert FakeSession.instances[0].started
-            assert (State.CONNECTED, "FakeUsbTransport") in states
-
-            FakeSession.instances[0].simulate_disconnect()
-            await asyncio.sleep(0.05)  # let it loop back and reconnect
-
-            assert len(FakeSession.instances) == 2, "should start a new session, not reuse the dead one"
-            assert FakeSession.instances[1].started
-            assert display_server.created == 1, "virtual display must not be recreated on reconnect"
-            assert display_server.destroyed == 0, "virtual display must not be torn down on a mere disconnect"
-            assert any(
-                state is State.WAITING and "disconnect" in detail.lower() for state, detail in states
-            ), "must report back to waiting, not idle, on disconnect"
+            FakeUsbDevice.plugged_in = ["TABLET"]  # the phone is unplugged
+            await asyncio.sleep(0.2)
+            assert runner.client_labels == ["USB TABLET"]
+            phone_session = next(s for s in FakeSession.instances if s.closed)
+            assert phone_session is not None
 
             runner.request_stop()
             await asyncio.wait_for(run_task, timeout=1)
-
-        assert display_server.created == 1
-        assert display_server.destroyed == 1
-        assert FakeInputInjectorForRunner.instances[0].closed
-        assert states[-1] == (State.IDLE, "")
+        assert FakeDisplayServer.destroyed == FakeDisplayServer.created
 
     asyncio.run(body())
 
 
-class FailingThenDisconnectTrackingTransport(Transport):
-    """connect() always raises — stands in for a UsbTransport whose iproxy
-    tunnel never came up (device still enumerating, etc). Tracks whether
-    disconnect() got called so the test can catch a leak: if nothing cleans
-    up a transport whose connect() failed, its iproxy subprocess (or
-    whatever resource it opened) is left running."""
-
-    def __init__(self) -> None:
-        self.disconnected = False
-
-    async def is_available(self) -> bool:
-        return True
-
-    async def connect(self) -> None:
-        raise RuntimeError("Could not connect to the iPad's signaling server.")
-
-    async def disconnect(self) -> None:
-        self.disconnected = True
-
-    async def send_signal(self, message: dict) -> None:
-        raise NotImplementedError
-
-    async def receive_signal(self) -> dict:
-        raise NotImplementedError
-
-
-def test_establish_transport_disconnects_on_failed_connect():
-    """Covers a resource leak hit live: a transport whose connect() raised
-    (retries exhausted) was never disconnect()ed, leaking its iproxy
-    subprocess — the next attempt then failed immediately with "Address
-    already in use" stacked on top of the original error."""
-
+def test_usb_device_waits_for_a_free_slot_instead_of_being_refused():
     async def body():
-        transport = FailingThenDisconnectTrackingTransport()
-        runner = HostRunner(display_config=None, on_status=lambda e: None)
-
-        async def fake_choose_transport(_config):
-            return transport
-
+        FakeUsbDevice.plugged_in = ["TABLET"]
+        FakeUsbDevice.built.clear()
+        runner = _runner(max_clients=1)
         with (
-            patch("host.runner.choose_transport", side_effect=fake_choose_transport),
-        ):
-            config = HostConfig(display=None)
-            try:
-                await asyncio.wait_for(runner._establish_transport(config), timeout=1)
-                raised = False
-            except RuntimeError:
-                raised = True
-
-        assert raised, "the original connect failure must still propagate"
-        assert transport.disconnected, "the failed transport must still be cleaned up"
-
-    asyncio.run(body())
-
-
-def test_usb_unplug_forces_disconnect_even_if_webrtc_stays_connected():
-    """Covers the actual feature request: WebRTC's ICE can keep a session's
-    media flowing over Wi-Fi even after the USB cable is unplugged, if the
-    iPad happens to share a LAN with this host — confirmed live (video kept
-    streaming for minutes after an unplug). A user who connected over USB
-    may want unplugging it to always mean "disconnected" rather than a
-    silent continue-over-Wi-Fi, so HostRunner polls USB presence and forces
-    the session closed the moment it's gone, independent of whether
-    WebRtcSession's own wait_closed() ever fires on its own."""
-
-    async def body():
-        FakeUsbTransport.instances.clear()
-        FakeInputInjectorForRunner.instances.clear()
-        FakeSession.instances.clear()
-        display_server = FakeDisplayServerForRunner()
-        states: list[tuple[State, str]] = []
-        usb_gone = asyncio.Event()
-        watchdog_calls = 0
-
-        runner = HostRunner(
-            display_config=None,
-            on_status=lambda e: states.append((e.state, e.detail)),
-        )
-
-        async def fake_choose_transport(_config):
-            return FakeUsbTransport()
-
-        async def fake_wait_until_usb_unavailable():
-            # Only the first session's watchdog actually fires — otherwise,
-            # since `usb_gone` stays set, every subsequent reconnected
-            # session's watchdog would also resolve immediately and the
-            # runner would reconnect in a tight loop forever. Realistically
-            # the next _establish_transport() would stop choosing USB once
-            # it's actually gone; that re-selection is covered separately by
-            # test_switches_from_wifi_to_usb_when_cable_appears_mid_wait.
-            nonlocal watchdog_calls
-            watchdog_calls += 1
-            if watchdog_calls == 1:
-                await usb_gone.wait()
-            else:
-                await asyncio.Event().wait()
-
-        with (
-            patch("host.runner.X11DisplayServer.cleanup_stale_virtual_outputs", return_value=[]),
-            patch("host.runner.choose_transport", side_effect=fake_choose_transport),
-            patch("host.runner.choose_display_server", return_value=display_server),
-            patch("host.runner.InputInjector", FakeInputInjectorForRunner),
-            patch("host.runner.WebRtcSession", FakeSession),
-            patch("host.runner.UsbTransport", FakeUsbTransport),
-            patch("host.runner._wait_until_usb_unavailable", side_effect=fake_wait_until_usb_unavailable),
+            patch("host.runner.UsbTransport", FakeUsbDevice),
+            patch("host.runner._USB_POLL_S", 0.02),
         ):
             run_task = asyncio.ensure_future(runner.run())
-            await asyncio.sleep(0.05)  # let the first session connect
-
-            assert len(FakeSession.instances) == 1
-            first_session = FakeSession.instances[0]
-            assert not first_session.closed
-
-            # Simulate the physical unplug: the watchdog notices, but
-            # wait_closed() never resolves on its own — mirroring the live
-            # case where the WebRTC connection kept working over Wi-Fi.
-            usb_gone.set()
-            await asyncio.sleep(0.05)
-
-            assert first_session.closed, "must force-close even though wait_closed() never fired"
-            assert len(FakeSession.instances) == 2, "must loop back and start a new session"
-
-            runner.request_stop()
-            await asyncio.wait_for(run_task, timeout=1)
-
-        assert states[-1] == (State.IDLE, "")
-
-    asyncio.run(body())
-
-
-class ClosesMidHandshakeSession(FakeSession):
-    """The first session's start() dies the way a device-side listener being
-    recycled does — the signaling websocket closes with 1001 before the
-    answer arrives. Later sessions connect normally."""
-
-    async def start(self, _transport) -> None:
-        if len(FakeSession.instances) == 1:
-            from websockets.exceptions import ConnectionClosedOK
-            from websockets.frames import Close
-
-            raise ConnectionClosedOK(Close(1001, ""), Close(1001, ""), rcvd_then_sent=True)
-        await super().start(_transport)
-
-
-def test_signaling_closing_mid_handshake_retries_instead_of_crashing():
-    """Covers the crash hit live: `ConnectionClosedOK: received 1001 (going
-    away)` out of session.start() propagated out of HostRunner.run() and took
-    the whole host session down. It must wait for the device and try again,
-    keeping the virtual display up."""
-
-    async def body():
-        FakeUsbTransport.instances.clear()
-        FakeInputInjectorForRunner.instances.clear()
-        FakeSession.instances.clear()
-        display_server = FakeDisplayServerForRunner()
-        states: list[tuple[State, str]] = []
-
-        runner = HostRunner(
-            display_config=None,
-            on_status=lambda e: states.append((e.state, e.detail)),
-        )
-
-        async def fake_choose_transport(_config):
-            return FakeUsbTransport()
-
-        with (
-            patch("host.runner.X11DisplayServer.cleanup_stale_virtual_outputs", return_value=[]),
-            patch("host.runner.choose_transport", side_effect=fake_choose_transport),
-            patch("host.runner.choose_display_server", return_value=display_server),
-            patch("host.runner.InputInjector", FakeInputInjectorForRunner),
-            patch("host.runner.WebRtcSession", ClosesMidHandshakeSession),
-        ):
-            run_task = asyncio.ensure_future(runner.run())
+            await _settle()
+            FakeListener.instance.arrive(FakeTransport("wifi"))
             await asyncio.sleep(0.1)
-
-            assert not run_task.done(), "run() must not have crashed"
-            assert len(FakeSession.instances) == 2, "should retry with a fresh session"
-            assert FakeSession.instances[1].started
-            assert (State.CONNECTED, "FakeUsbTransport") in states
-            assert display_server.created == 1 and display_server.destroyed == 0
+            # Either order of arrival is fine; what matters is the host never
+            # holds more than the cap and nobody was sent a refusal.
+            assert len(runner.client_labels) == 1
 
             runner.request_stop()
             await asyncio.wait_for(run_task, timeout=1)
-
-        assert display_server.destroyed == 1
 
     asyncio.run(body())

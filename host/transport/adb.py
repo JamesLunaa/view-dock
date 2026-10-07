@@ -35,10 +35,19 @@ class AdbTransport(UsbTransport):
     # can't ride `adb forward`, which is TCP-only), so a cable works without Wi-Fi.
     supports_wired_stream = True
 
-    def _tunnel_argv(self) -> list[str]:
-        return ["adb", "forward", f"tcp:{self._local_port}", f"tcp:{self._device_port}"]
+    @property
+    def label(self) -> str:
+        return f"USB {self.serial}" if self.serial else "USB (Android)"
 
-    async def is_available(self) -> bool:
+    def _adb_argv(self, *args: str) -> list[str]:
+        return ["adb", *(["-s", self.serial] if self.serial else []), *args]
+
+    def _tunnel_argv(self) -> list[str]:
+        return self._adb_argv("forward", f"tcp:{self._local_port}", f"tcp:{self._device_port}")
+
+    @classmethod
+    async def list_devices(cls) -> list[str]:
+        """Serials of the devices in the usable `device` state."""
         try:
             proc = await asyncio.create_subprocess_exec(
                 "adb",
@@ -47,11 +56,12 @@ class AdbTransport(UsbTransport):
                 stderr=asyncio.subprocess.DEVNULL,
             )
         except FileNotFoundError:
-            return False
+            return []
         stdout, _ = await proc.communicate()
         if proc.returncode != 0:
-            return False
-        return any(_is_ready_device_line(line) for line in stdout.decode(errors="replace").splitlines())
+            return []
+        lines = stdout.decode(errors="replace").splitlines()
+        return [line.split()[0] for line in lines if _is_ready_device_line(line)]
 
     async def disconnect(self) -> None:
         await super().disconnect()
@@ -60,10 +70,7 @@ class AdbTransport(UsbTransport):
     async def _remove_forward(self) -> None:
         try:
             proc = await asyncio.create_subprocess_exec(
-                "adb",
-                "forward",
-                "--remove",
-                f"tcp:{self._local_port}",
+                *self._adb_argv("forward", "--remove", f"tcp:{self._local_port}"),
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )

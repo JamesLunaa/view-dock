@@ -25,7 +25,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from host.netinfo import wifi_address_text
 from host.presets import Preset
+from host.transport.wifi import DEFAULT_PORT
 from host.runner import State
 
 _SETTINGS_ORG = "view-dock"
@@ -72,6 +74,9 @@ class HostWindow(QWidget):
         status_row.addWidget(self._status_text)
         status_row.addStretch(1)
 
+        self._address_label = QLabel(wifi_address_text(DEFAULT_PORT))
+        self._address_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+
         self._preset_combo = QComboBox()
         for preset in presets:
             self._preset_combo.addItem(preset.label, preset)
@@ -105,6 +110,7 @@ class HostWindow(QWidget):
 
         layout = QVBoxLayout()
         layout.addLayout(status_row)
+        layout.addWidget(self._address_label)
         layout.addWidget(QLabel("Resolution (logical points):"))
         layout.addWidget(self._preset_combo)
         layout.addLayout(button_row)
@@ -119,6 +125,9 @@ class HostWindow(QWidget):
         label = state.value + (f": {detail}" if detail else "")
         self._status_dot.setPixmap(_dot_pixmap(dot_color))
         self._status_text.setText(label)
+        # The network can change between sessions (docking, a new Wi-Fi), so
+        # look again rather than showing whatever it was at launch.
+        self._address_label.setText(wifi_address_text(DEFAULT_PORT))
 
         editable = state in (State.IDLE, State.ERROR)
         self._preset_combo.setEnabled(editable)

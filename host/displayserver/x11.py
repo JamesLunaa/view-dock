@@ -20,6 +20,7 @@ since a kernel-forced output reports "connected" with no geometry until a
 mode is set, same shape as a genuinely disconnected one.
 """
 
+import itertools
 import logging
 import os
 import re
@@ -57,6 +58,9 @@ _RECOVER_POLL_S = 0.2
 # If the output is still gone after this long, the desktop's display manager
 # most likely switched it off; turn it back on ourselves.
 _REENABLE_AFTER_S = 1.5
+# Mode names must be unique per virtual display: several clients can ask for the
+# same size at the same time, and `xrandr --newmode` fails on a name that exists.
+_mode_serial = itertools.count()
 
 
 def _spare_rank(name: str) -> tuple[int, int]:
@@ -70,6 +74,11 @@ def _spare_rank(name: str) -> tuple[int, int]:
 
 
 class X11DisplayServer(DisplayServer):
+    # Outputs currently enabled by live instances, in the order they were placed.
+    # With several clients each virtual monitor goes right of the previous one
+    # instead of every one landing right of the primary (on top of each other).
+    _virtual_outputs: list[str] = []
+
     def __init__(self) -> None:
         self._output_name: str | None = None
         self._mode_name: str | None = None
@@ -131,9 +140,9 @@ class X11DisplayServer(DisplayServer):
         # dummy-only test server in host/xorg/dummy.conf has none) makes this
         # an actual extended desktop: windows dragged into that region show
         # up here.
-        primary = self._find_primary_output()
-        if primary is not None and primary != output:
-            enable_command += ["--right-of", primary]
+        anchor = self._placement_anchor(output)
+        if anchor is not None and anchor != output:
+            enable_command += ["--right-of", anchor]
         try:
             subprocess.run(enable_command, check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as error:
@@ -152,6 +161,13 @@ class X11DisplayServer(DisplayServer):
 
         self._output_name = output
         self._mode_name = mode_name
+        X11DisplayServer._virtual_outputs.append(output)
+
+    def _placement_anchor(self, output: str) -> str | None:
+        """What a virtual monitor is placed beside: the most recently placed
+        other virtual monitor, else the primary output."""
+        others = [name for name in X11DisplayServer._virtual_outputs if name != output]
+        return others[-1] if others else self._find_primary_output()
 
     @staticmethod
     def _output_has_real_monitor(output: str) -> bool:
@@ -174,6 +190,8 @@ class X11DisplayServer(DisplayServer):
             subprocess.run(["xrandr", "--output", old, "--off"], check=False)
             subprocess.run(["xrandr", "--delmode", old, self._mode_name], check=False)
             subprocess.run(["xrandr", "--rmmode", self._mode_name], check=False)
+            if old in X11DisplayServer._virtual_outputs:
+                X11DisplayServer._virtual_outputs.remove(old)
             if self._forced_output == old:
                 unforce_connector(old)
                 self._forced_output = None
@@ -195,6 +213,7 @@ class X11DisplayServer(DisplayServer):
             for line in result.stdout.splitlines()
             if (m := _OUTPUT_STATUS_RE.match(line)) and _GEOMETRY_RE.search(m.group(2))
             and m.group(1) != self._output_name
+            and m.group(1) not in X11DisplayServer._virtual_outputs
         ]
         if not lit:
             logger.error("No real display is lit after the handoff; running xrandr --auto.")
@@ -230,7 +249,12 @@ class X11DisplayServer(DisplayServer):
             # Seen live when a real monitor was plugged in: the rectangle we
             # hold stopped being on the X screen, every grab failed with
             # BadMatch, and each retry of the session hit the same stale rect.
-            logger.warning("Capture failed; re-resolving the virtual display.", exc_info=True)
+            # Expected whenever the desktop reconfigures its outputs (another client's
+            # monitor appearing, a real monitor being plugged in) and recovered from
+            # right below, so no traceback and not a warning: the tray turns
+            # warnings into pop-ups. The traceback stays available at DEBUG.
+            logger.info("Display layout changed during capture; re-resolving the virtual display.")
+            logger.debug("Capture error was:", exc_info=True)
             self._recover_capture()
             return self._sct.grab(self._monitor)
 
@@ -259,11 +283,11 @@ class X11DisplayServer(DisplayServer):
     def _reenable_output(self) -> None:
         logger.info("Re-enabling %s after it was switched off.", self._output_name)
         command = ["xrandr", "--output", self._output_name, "--mode", self._mode_name]
-        primary = self._find_primary_output()
-        if primary is not None and primary != self._output_name:
-            command += ["--right-of", primary]
+        anchor = self._placement_anchor(self._output_name)
+        if anchor is not None and anchor != self._output_name:
+            command += ["--right-of", anchor]
         subprocess.run(command, check=False, capture_output=True)
-        self._tell_kscreen_output_is_enabled(primary)
+        self._tell_kscreen_output_is_enabled(self._find_primary_output())
 
     def _tell_kscreen_output_is_enabled(self, primary: str | None) -> None:
         """Re-enabling through xrandr alone leaves Plasma not drawing on the
@@ -287,7 +311,7 @@ class X11DisplayServer(DisplayServer):
             except Exception:
                 self._cursor_failures += 1
                 if self._cursor_failures == 1:
-                    logger.warning("Cursor overlay failed; skipping it this frame.", exc_info=True)
+                    logger.debug("Cursor overlay failed; skipping it this frame.", exc_info=True)
                 if self._cursor_failures >= _CURSOR_MAX_CONSECUTIVE_FAILURES:
                     logger.warning(
                         "Cursor overlay failed %d frames in a row; disabling it.",
@@ -343,7 +367,7 @@ class X11DisplayServer(DisplayServer):
             # The output can be momentarily absent mid-reconfiguration, and
             # the user may have disabled it outright. Keep the last known
             # rectangle; the next change event will resolve it again.
-            logger.warning("Virtual output %s has no geometry right now.", self._output_name)
+            logger.info("Virtual output %s has no geometry right now (display layout is changing).", self._output_name)
             self._geometry_stale = True
             return
 
@@ -367,6 +391,8 @@ class X11DisplayServer(DisplayServer):
         if self._layout_watcher is not None:
             self._layout_watcher.close()
 
+        if self._output_name in X11DisplayServer._virtual_outputs:
+            X11DisplayServer._virtual_outputs.remove(self._output_name)
         self._output_name = None
         self._mode_name = None
         self._sct = None
@@ -480,9 +506,10 @@ class X11DisplayServer(DisplayServer):
 
         # PID-suffixed so a mode left behind by a crashed/force-killed prior
         # run can never collide with this run's `--newmode` and fail with
-        # RandR's BadName/RRCreateMode. Leftover modes themselves are swept up
+        # RandR's BadName/RRCreateMode; the serial keeps two displays of one run
+        # (several clients at once) apart. Leftover modes themselves are swept up
         # by cleanup_stale_virtual_outputs().
-        mode_name = f"viewdock_{width}x{height}_{config.refresh_hz}_{os.getpid()}"
+        mode_name = f"viewdock_{width}x{height}_{config.refresh_hz}_{os.getpid()}_{next(_mode_serial)}"
         # -r: reduced-blanking CVT. Found live: plain `cvt` for 1180x820@60
         # produces a 79.25MHz-pixel-clock mode that a real Intel iGPU
         # (Tiger Lake Iris Xe) refused to activate as a third simultaneous

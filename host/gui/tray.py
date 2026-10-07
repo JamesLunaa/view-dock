@@ -321,9 +321,13 @@ class TrayApp:
 
 
 class _TrayLogHandler(logging.Handler):
-    """Surfaces WARNING+ log records as tray balloon notifications — these
+    """Surfaces ERROR+ log records as tray balloon notifications — these
     matter even when the window is hidden/minimized to tray, which the
     window's own log view (see _WindowLogHandler) can't help with then.
+    Warnings stay in the log view only: the host logs several (a display
+    layout change while another client connects, a cursor overlay hiccup)
+    that it recovers from by itself, and a pop-up for each one looks like
+    something is broken.
 
     emit() runs on whatever thread produced the log record (almost always
     AsyncLoopThread's, not Qt's GUI thread) — it only formats and emits a
@@ -335,7 +339,7 @@ class _TrayLogHandler(logging.Handler):
     """
 
     def __init__(self, bridge: _StatusBridge) -> None:
-        super().__init__(level=logging.WARNING)
+        super().__init__(level=logging.ERROR)
         self._bridge = bridge
 
     def emit(self, record: logging.LogRecord) -> None:

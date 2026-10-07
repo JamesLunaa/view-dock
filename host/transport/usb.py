@@ -17,6 +17,7 @@ Requires `usbmuxd` running and `iproxy`/`idevice_id` on PATH (Arch package:
 import asyncio
 import json
 import logging
+import socket
 
 import websockets
 from websockets.asyncio.client import ClientConnection, connect
@@ -33,6 +34,14 @@ logger = logging.getLogger(__name__)
 _CLIENT_HELLO_TIMEOUT_S = 1.0
 
 
+def free_local_port() -> int:
+    """A currently unused local TCP port, for one device's tunnel — several
+    devices can be plugged in at once and each needs its own."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
 def is_wired_hello(raw: str | bytes) -> bool:
     """True for a `hello` whose protocol_version is new enough for the wired stream."""
     if not isinstance(raw, str):
@@ -46,19 +55,31 @@ def is_wired_hello(raw: str | bytes) -> bool:
 
 
 class UsbTransport(Transport):
-    def __init__(self, local_port: int = 8766, device_port: int = 8766) -> None:
+    def __init__(self, local_port: int = 8766, device_port: int = 8766, serial: str | None = None) -> None:
         self._local_port = local_port
         self._device_port = device_port
+        # Which device this tunnel is for. None = whichever the tool picks, which is
+        # only right while a single device is attached.
+        self.serial = serial
         self._iproxy_process: asyncio.subprocess.Process | None = None
         self._iproxy_log_task: asyncio.Task | None = None
         self._connection: ClientConnection | None = None
         # A message read while probing that turned out not to be a wired hello.
         self._pending: list[str | bytes] = []
 
-    def _tunnel_argv(self) -> list[str]:
-        return ["iproxy", str(self._local_port), str(self._device_port)]
+    @property
+    def label(self) -> str:
+        return f"USB {self.serial[:8]}" if self.serial else "USB"
 
-    async def is_available(self) -> bool:
+    def _tunnel_argv(self) -> list[str]:
+        argv = ["iproxy"]
+        if self.serial:
+            argv += ["-u", self.serial]
+        return [*argv, str(self._local_port), str(self._device_port)]
+
+    @classmethod
+    async def list_devices(cls) -> list[str]:
+        """Identifiers (UDIDs) of the attached devices, `[]` when the tool is missing."""
         try:
             proc = await asyncio.create_subprocess_exec(
                 "idevice_id",
@@ -67,9 +88,14 @@ class UsbTransport(Transport):
                 stderr=asyncio.subprocess.DEVNULL,
             )
         except FileNotFoundError:
-            return False
+            return []
         stdout, _ = await proc.communicate()
-        return proc.returncode == 0 and bool(stdout.strip())
+        if proc.returncode != 0:
+            return []
+        return stdout.decode(errors="replace").split()
+
+    async def is_available(self) -> bool:
+        return bool(await self.list_devices())
 
     async def connect(self) -> None:
         # iproxy's stdout/stderr must NOT be inherited: left to the default,

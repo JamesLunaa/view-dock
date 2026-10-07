@@ -24,8 +24,10 @@ from collections import deque
 from host.async_loop_thread import AsyncLoopThread
 from host.config import HostConfig
 from host.displayserver.x11 import X11DisplayServer
+from host.netinfo import wifi_address_text
 from host.presets import build_presets
 from host.runner import HostRunner, State, StatusEvent
+from host.transport.wifi import DEFAULT_PORT
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,7 @@ class HostUi:
         self._selected = 0
         self._state = State.IDLE
         self._detail = ""
+        self._address_text = wifi_address_text(DEFAULT_PORT)
         self._status_queue: queue.Queue[StatusEvent] = queue.Queue()
         self._log_lines: deque[str] = deque(maxlen=_LOG_LINES)
         self._loop_thread = AsyncLoopThread()
@@ -94,6 +97,7 @@ class HostUi:
             )
             return
 
+        self._address_text = wifi_address_text(DEFAULT_PORT)  # the network may have changed
         self._runner = HostRunner(display_config, on_status=self._on_status)
         self._state = State.STARTING
         self._detail = preset.label
@@ -156,8 +160,9 @@ class HostUi:
         stdscr.addnstr(0, 0, title, width - 1)
         stdscr.addnstr(0, max(0, width - len(status) - 1), status, width - 1)
         stdscr.hline(1, 0, curses.ACS_HLINE, width)
+        stdscr.addnstr(2, 0, self._address_text, width - 1)
 
-        row = 2
+        row = 3
         stdscr.addnstr(row, 0, "Resolution (logical points):", width - 1)
         row += 1
         editable = self._state in (State.IDLE, State.ERROR)

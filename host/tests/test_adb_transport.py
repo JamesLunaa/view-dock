@@ -3,8 +3,8 @@
 
 """Covers the Android USB path: `AdbTransport` reuses `UsbTransport`'s
 connect/retry logic but must build an `adb forward` tunnel, only treat a
-device in the `device` state as usable, and be picked up by the runner's
-wired-transport detection alongside the iOS one.
+device in the `device` state as usable, and list the usable devices by serial
+so the runner can serve several at once.
 """
 
 import asyncio
@@ -12,11 +12,8 @@ from unittest.mock import patch
 
 import pytest
 
-from host.runner import _find_wired_transport, choose_transport
-from host.config import HostConfig
 from host.transport.adb import AdbTransport, _is_ready_device_line
 from host.transport.usb import UsbTransport
-from host.transport.wifi import WifiTransport
 
 
 def test_tunnel_is_adb_forward_not_iproxy():
@@ -48,35 +45,37 @@ def test_is_available_false_when_adb_missing():
     asyncio.run(body())
 
 
-class _Available:
-    def __init__(self, available: bool) -> None:
-        self._available = available
-
-    def __call__(self):
-        return self
-
-    async def is_available(self) -> bool:
-        return self._available
+def test_serial_targets_that_device_in_every_adb_call():
+    transport = AdbTransport(local_port=9001, device_port=9002, serial="R58M123ABC")
+    assert transport._tunnel_argv() == ["adb", "-s", "R58M123ABC", "forward", "tcp:9001", "tcp:9002"]
+    assert UsbTransport(local_port=9001, device_port=9002, serial="UDID1")._tunnel_argv() == [
+        "iproxy", "-u", "UDID1", "9001", "9002",
+    ]
 
 
-def test_runner_finds_adb_device_when_no_ios_device():
+def test_list_devices_returns_only_usable_serials():
+    class FakeProc:
+        returncode = 0
+
+        async def communicate(self):
+            out = b"List of devices attached\nAAA\tdevice\nBBB\tunauthorized\nCCC\tdevice product:x\n\n"
+            return out, b""
+
     async def body():
-        with (
-            patch("host.runner.UsbTransport", _Available(False)),
-            patch("host.runner.AdbTransport", lambda: sentinel),
-        ):
-            sentinel = _Available(True)
-            assert await _find_wired_transport() is sentinel
+        async def fake_exec(*_args, **_kwargs):
+            return FakeProc()
+
+        with patch("asyncio.create_subprocess_exec", fake_exec):
+            assert await AdbTransport.list_devices() == ["AAA", "CCC"]
+            assert await AdbTransport().is_available() is True
 
     asyncio.run(body())
 
 
-def test_choose_transport_falls_back_to_wifi_with_nothing_attached():
+def test_list_devices_empty_when_tool_missing():
     async def body():
-        with (
-            patch("host.runner.UsbTransport", _Available(False)),
-            patch("host.runner.AdbTransport", _Available(False)),
-        ):
-            assert isinstance(await choose_transport(HostConfig(display=None)), WifiTransport)
+        with patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError):
+            assert await AdbTransport.list_devices() == []
+            assert await UsbTransport.list_devices() == []
 
     asyncio.run(body())
