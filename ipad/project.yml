@@ -13,6 +13,8 @@ targets:
   ViewDock:
     type: application
     platform: iOS
+    # A shared scheme, so command-line builds (xcodebuild -scheme ViewDock) work.
+    scheme: {}
     sources:
       - path: Sources
       # XcodeGen has no `resources:` key for targets (it was silently ignored, so

@@ -1,0 +1,52 @@
+name: ipad-build
+
+# Builds an UNSIGNED ViewDock.ipa on a macOS runner, so the iPad app can be
+# built without a Mac. Sign and install it yourself (e.g. with a sideloading
+# tool and your own Apple ID); an unsigned .ipa won't install as-is.
+# Manual only: run it from the Actions tab.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ipad
+        run: xcodegen generate
+
+      - name: Build (unsigned)
+        working-directory: ipad
+        run: |
+          xcodebuild \
+            -project ViewDock.xcodeproj \
+            -scheme ViewDock \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package .ipa
+        working-directory: ipad
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/ViewDock.app Payload/
+          zip -qry ViewDock.ipa Payload
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ViewDock-unsigned-ipa
+          path: ipad/ViewDock.ipa
+          retention-days: 30
