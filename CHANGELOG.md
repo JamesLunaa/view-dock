@@ -9,6 +9,16 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
 
 ## [Unreleased]
 
+## [2.4.0](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-12
+
+### Added
+- **Build the iPad app on Linux, no Mac needed.** `ipad/xtool/` lets
+  [xtool](https://xtool.sh) build the app, sign it with your Apple ID and install it on the
+  iPad over USB (`cd ipad/xtool && xtool dev`). The Xcode/XcodeGen build is unchanged, and
+  both compile the same sources. Reported working on an iPad Air 11" (M3) with iPadOS 27.0.1,
+  built on Arch Linux. Arch needs a few library symlinks in the Swift toolchain; see
+  `ipad/README.md`. No app or protocol change.
+
 ## [2.3.0](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-12
 
 ### Added

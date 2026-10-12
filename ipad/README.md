@@ -26,6 +26,51 @@ This resolves the WebRTC Swift package dependency and produces a normal
 Xcode project you can build and run on a physical iPad (WebRTC and camera/
 screen APIs generally don't work in the Simulator for this kind of app).
 
+## Building on Linux with xtool
+
+[xtool](https://xtool.sh) builds the app with SwiftPM, signs it with your Apple ID and
+installs it over USB, without a Mac. `xtool/` holds its config: `Package.swift` (the app is
+the package's single library product, with the WebRTC dependency), `xtool.yml`,
+`Info.plist` (the same keys as `project.yml`'s `info` section; keep the two in step), and
+`Sources/ViewDock`, a symlink to `ipad/Sources` because SwiftPM won't take a target path
+outside the package. Both builds compile the same sources.
+
+One-time setup:
+1. Install the [Swift 6.4 toolchain](https://swift.org/install/linux), `usbmuxd`, and the
+   xtool AppImage from its
+   [releases](https://github.com/xtool-org/xtool/releases/latest) (rename it `xtool` and
+   put it on your `PATH`).
+2. Download Xcode from <https://developer.apple.com/download/all/?q=Xcode> in a browser
+   (it needs an Apple login). xtool takes the iOS SDK from the `.xip`.
+3. Run `xtool setup`. Log in with your Apple ID (or an App Store Connect API key with a
+   paid account), then give it the path to the `.xip`.
+4. On the iPad, turn on Developer Mode (Settings → Privacy & Security).
+
+Then, with the iPad plugged in and unlocked:
+
+```sh
+cd ipad/xtool
+xtool dev
+```
+
+The first launch asks you to trust the developer (Settings → General → VPN & Device
+Management). With a free Apple ID the app stops opening after 7 days; run `xtool dev` again
+to reinstall.
+
+**Arch Linux:** Swift's Linux toolchain is built for Ubuntu and looks for `libxml2.so.2` and
+`libncurses.so.6`, which Arch names differently. Symlink them into the toolchain (paths
+relative to the toolchain's `usr/`):
+
+```sh
+ln -s /usr/lib/libxml2.so.16 lib/swift/linux/libxml2.so.2
+ln -s /usr/lib/libncursesw.so.6 lib/swift/linux/libncurses.so.6
+ln -s /usr/lib/libxml2.so.16 lib/libxml2.so.2   # for the linker, lld
+```
+
+Without the last one the build fails with `Could not parse output of ... ld.lld
+-version_details as JSON`. The build also caches that failure, so delete `xtool/.build/out`
+after adding the link.
+
 ## Layout
 
 - `Sources/ViewDockApp.swift` — SwiftUI app entry point.
@@ -39,6 +84,7 @@ screen APIs generally don't work in the Simulator for this kind of app).
   `WebSocketFraming` and `H264AnnexB` that those build on.
 - `Package.swift` + `Tests/` — a SwiftPM package that exists only to unit-test the
   Foundation-only logic with `swift test` (see Tests below); it is not how the app is built.
+- `xtool/` — the build config for xtool on Linux (see above).
 - `Resources/Assets.xcassets` — the app icon, generated from
   `branding/icon.svg` (see `CONTRIBUTING.md`); don't edit the PNG by hand.
 - `Sources/Protocol/Messages.swift` — Swift mirror of
