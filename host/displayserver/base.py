@@ -3,7 +3,7 @@
 
 """Abstraction over a Linux display server's virtual-monitor + capture
 capabilities, so `streaming/` doesn't need to know whether it's talking to
-X11 or (later) Wayland.
+X11 or Wayland.
 """
 
 from abc import ABC, abstractmethod
@@ -33,6 +33,11 @@ class DisplayServer(ABC):
         """Optional fast path: the frame as a C-contiguous (height, width, 4)
         uint8 BGRA array. Only valid when `supports_bgra_capture` is True."""
         raise NotImplementedError
+
+    def attach_input_device(self, device_name: str) -> None:
+        """Called with the name of the uinput device created for this display,
+        for display servers that must be told which output its touches belong
+        to. Nothing to do by default."""
 
     @abstractmethod
     def destroy_virtual_display(self) -> None:

@@ -22,6 +22,7 @@ apps, typically on an in-app Licenses screen.
 | numpy | BSD-3-Clause (and others for bundled parts) |
 | python-xlib | LGPL-2.1-or-later |
 | python-uinput | GPL-3.0-or-later |
+| jeepney (Wayland: portal and KWin D-Bus calls) | MIT |
 | PySide6 (optional GUI) | LGPL-3.0 / GPL-3.0 |
 | pytest (tests only) | MIT |
 

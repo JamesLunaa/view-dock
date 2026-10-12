@@ -51,7 +51,8 @@ same wired stream, verified on an iPad Air 11" (M3).
 - Wi-Fi discovery (the apps list hosts on the network) works on Android (reported) but has not yet been tried
   on an iPad; it needs a network that lets devices talk to each other (guest
   networks and "AP isolation" block it). The manual IP field is always there as a fallback.
-- Wayland is not supported on the host yet (X11 only).
+- Wayland: only KDE Plasma (6.6+) is supported. Other Wayland desktops (GNOME, Sway, …)
+  aren't — use an X11 session there. Two clients at once on Wayland hasn't been tried.
 - Android: landscape only. Keep the app in the foreground — while it is in the
   background the picture pauses, and it is meant to resume (via a fresh
   keyframe) when you return, but that hasn't been tested. Android apps are
@@ -107,7 +108,7 @@ likely fine but haven't been confirmed.
 
 | | Tested configuration | Notes |
 |---|---|---|
-| **Host** | Arch Linux, KDE Plasma, **Xorg** (X11) session | The virtual-display approach relies on forcing a GPU connector "on" at the kernel/DRM level so KDE's `kscreen` treats it as a real monitor — see `host/README.md`'s "Real GPU output on an Xorg desktop" for why, and why Wayland doesn't work the same way yet. Other X11 window managers/desktop environments likely work for the core display pipeline, but the kscreen-specific connector-forcing step is KDE-specific and untested elsewhere. |
+| **Host** | Arch Linux, KDE Plasma 6.7, **Xorg** (X11) or **Wayland** session | On Xorg the virtual-display approach relies on forcing a GPU connector "on" at the kernel/DRM level so KDE's `kscreen` treats it as a real monitor — see `host/README.md`'s "Real GPU output on an Xorg desktop" for why. On Wayland the host uses a different, portal-based path with no connector forcing (see `host/README.md`'s "KDE Plasma on Wayland"); it works over both USB and Wi-Fi. Other X11 window managers/desktop environments likely work for the core display pipeline, but the kscreen-specific connector-forcing step is KDE-specific and untested elsewhere. |
 | **iPad** | iPad Air 11" (M3), iPadOS 26.6 | Wi-Fi and the USB wired stream (video through the cable, 60 fps) both verified on this device. The Xcode project's deployment target is iOS 17.0, so earlier iPadOS versions and other iPad models should work in principle, but only this specific device/OS combination has actually been run. |
 | **Android** | vivo Y28 (V2352), Funtouch OS 15 (Android 15), phone — USB and Wi-Fi both verified | `minSdk` is 26 (Android 8.0), so other versions and devices, including tablets, should work in principle, but only this device has actually been run. The host's "Android tablet" size preset is a guess, untested. |
 | **Mac** (to build the iPad app only) | Any recent Xcode with the iOS 17 SDK | No specific Xcode version is pinned; building requires [XcodeGen](https://github.com/yonaskolb/XcodeGen) and a free or paid Apple Developer account to code-sign onto a physical device (the iPad app hasn't been run in the Simulator — WebRTC/video needs real hardware). |
@@ -116,7 +117,8 @@ likely fine but haven't been confirmed.
 
 **Host (Arch Linux):**
 - X11 session (KDE Plasma on Xorg is the tested desktop — see Compatibility
-  above). Not Wayland yet.
+  above), or a KDE Plasma 6.6+ Wayland session (also needs
+  `gst-plugin-pipewire`). Other Wayland desktops aren't supported yet.
 - System packages: `xorg-server`, `xorg-xrandr`, `xf86-video-dummy`, `ffmpeg`.
 - Python 3.11+.
 - For USB: `usbmuxd` + `libimobiledevice`, specifically the AUR `-git`
@@ -237,8 +239,9 @@ have been run:
 
 Things to keep in mind on any distro:
 
-- **Log in to an X11/Xorg session.** Wayland isn't supported yet, and several
-  distros (Ubuntu, Fedora) now default to it.
+- **Log in to an X11/Xorg session** unless you use KDE Plasma. Of the Wayland
+  desktops only Plasma is supported, and several distros (Ubuntu, Fedora)
+  default to GNOME on Wayland.
 - **Packaged `libimobiledevice` may be too old** to pair with iOS 17+/iPadOS 26+
   (see `host/README.md`); USB may need a newer build from source. Wi-Fi is
   unaffected.

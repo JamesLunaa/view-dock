@@ -33,16 +33,18 @@ events received back from the device.
   `iproxy` is wired when its app announces support with a `hello` right after
   the tunnel connects (the host waits about a second, then falls back to
   WebRTC for older app builds).
-- `input/` — injects `input_event` messages from the iPad into the X11 (or
-  later Wayland) session via `uinput`.
+- `input/` — injects `input_event` messages from the iPad into the X11 or
+  Wayland session via `uinput`.
 - `scripts/force-connector.sh` — forces a real GPU connector "connected" at
   the kernel/DRM level so the virtual display can attach to it with nothing
   plugged in. This is the path used on a real Xorg desktop; see "Real GPU
   output on an Xorg desktop" below.
+- `displayserver/wayland.py` (+ `portal.py`, `pipewire_capture.py`) — the
+  KDE Plasma Wayland path; see "KDE Plasma on Wayland" below.
 - `xorg/dummy.conf` + `scripts/start-dummy-display.sh` — fallback for a
-  machine whose main desktop is Wayland (where `xrandr` can't create virtual
+  Wayland desktop other than Plasma (where `xrandr` can't create virtual
   outputs at all): brings up a separate `xf86-video-dummy`-backed X server.
-  See "Fallback: Wayland desktop" below.
+  See "Fallback: other Wayland desktops" below.
 - `config.py` — runtime configuration (virtual display resolution/refresh,
   transport preference) and `IPAD_PRESETS`, logical-point resolutions for
   current iPad models.
@@ -78,8 +80,10 @@ events received back from the device.
 
 ## Requirements
 
-- Arch Linux, X11 session (Wayland support is phase 2).
+- Arch Linux, X11 session — or a KDE Plasma 6.6+ Wayland session (see
+  "KDE Plasma on Wayland" below).
 - System packages: `xorg-server`, `xorg-xrandr`, `xf86-video-dummy`, `ffmpeg`.
+  On Wayland: `gst-plugin-pipewire` (and `kscreen`, part of Plasma).
 - For USB: `usbmuxd` + `libimobiledevice` (provides `iproxy`/`idevice_id`).
   **Use the AUR `-git` packages** (`usbmuxd-git`, `libimobiledevice-git`,
   `libusbmuxd-git`, `libplist-git`, `libimobiledevice-glue-git`) — Arch's
@@ -131,7 +135,7 @@ The host advertises itself over mDNS as `_viewdock._tcp` (`transport/discovery.p
 `zeroconf`) so the apps can list it; this is optional — if it fails to start the host logs a
 warning and a typed IP still works. Allow UDP 5353 on the LAN interface if you run a firewall.
 
-Not yet done: adaptive bitrate from `stats` messages, Pencil pressure/hover, and Wayland support (phase 2).
+Not yet done: adaptive bitrate from `stats` messages, Pencil pressure/hover, and Wayland desktops other than KDE Plasma.
 
 ## Running it
 
@@ -270,9 +274,52 @@ Caveats worth knowing:
   Position both explicitly and atomically if it lands somewhere odd:
   `kscreen-doctor output.eDP-1.position.0,0 output.HDMI-1.position.1920,0`
 
-### Fallback: Wayland desktop
+### KDE Plasma on Wayland
 
-If your main desktop is Wayland, `xrandr` can't create virtual outputs and
+> **Status:** works on Plasma 6.7 (Wayland) over both USB and Wi-Fi. Not yet
+> tried: two clients at once, and other Plasma versions.
+
+On a Plasma Wayland session the host picks `displayserver/wayland.py`
+automatically (it checks `XDG_SESSION_TYPE` and `XDG_CURRENT_DESKTOP`). No
+connector forcing, dummy driver or `xrandr` is involved:
+
+1. The host asks the desktop's **screen-sharing portal** for a *virtual*
+   screen. The first time, Plasma shows a dialog ("Create a new virtual
+   display to share…"); accept it and tick "allow restoring" so it isn't
+   asked again. The answer is kept in
+   `~/.local/state/view-dock/screencast-restore-token` — delete that file to
+   be asked again.
+2. KWin creates a real output for it (named `Virtual-…`), which you can drag
+   windows onto and arrange in System Settings > Display like any monitor.
+   The portal always makes it 1920x1080, so the host then uses
+   `kscreen-doctor` to add and select a mode of the device's size (this needs
+   **Plasma 6.6 or newer**; older versions letterbox the 1920x1080 picture),
+   sets its scale, and places it right of your other screens. (KWin rounds
+   custom widths to a multiple of 8, e.g. 1180 → 1184; the few pixels'
+   difference is stretched away.)
+3. Frames come from the portal's PipeWire stream through
+   `gst-launch-1.0` (`displayserver/pipewire_capture.py`), with the pointer
+   drawn in by KWin.
+4. Touches still go through the same uinput touchscreen as on X11; the host
+   tells KWin over D-Bus to map it onto the virtual screen (the "Target
+   display" setting in System Settings > Touchscreen).
+
+The output disappears when the client disconnects (after the usual short
+linger), since it lives exactly as long as the portal session.
+
+Per-output scaling works here, unlike X11: `VIEWDOCK_DISPLAY_SCALE=2` runs
+the output at the device's full pixel resolution (e.g. 2360x1640 for an iPad
+Air 11") with a 2x scale, so apps render sharp and at the right physical size
+— including windows dragged over from another screen. It costs more bandwidth
+and encoder time than the default 1x.
+
+Other Wayland desktops (GNOME, Sway, …) aren't supported yet; the host
+refuses to start a display there with a message saying so. The fallbacks
+below still apply to them.
+
+### Fallback: other Wayland desktops
+
+If your main desktop is Wayland but not KDE Plasma, `xrandr` can't create virtual outputs and
 `mss` can't capture real content at all — Xwayland is a compatibility shim,
 not a real X server, and returns all-zero frames. Options:
 
@@ -482,9 +529,15 @@ WebRTC connection itself is still technically alive.
 
 - **"No spare output" / no outputs other than the built-in screen listed by
   `xrandr`.** Check `echo $XDG_SESSION_TYPE`: on a **Wayland** session
-  `xrandr` only sees XWayland and none of the real connectors, so the host
-  can't create the display (forcing a connector won't help). Log out and
-  pick the **Plasma (X11)** session at the login screen.
+  `xrandr` only sees XWayland and none of the real connectors. On Plasma the
+  host should have picked the Wayland path instead — check
+  `echo $XDG_CURRENT_DESKTOP` contains `KDE`. On other Wayland desktops, log
+  out and pick an X11 session at the login screen.
+- **Wayland: "Screen sharing was declined" / no dialog appears.** The portal
+  dialog was dismissed, or a saved permission was revoked. Delete
+  `~/.local/state/view-dock/screencast-restore-token` and reconnect.
+- **Wayland: "GStreamer's PipeWire plugin is missing".**
+  `sudo pacman -S gst-plugin-pipewire`.
 - **`xrandr ... Configure crtc N failed` when enabling the display.** The
   mode's pixel clock is too high for the output. A forced **DisplayPort**
   output with nothing plugged in has a lower ceiling than HDMI — seen live
