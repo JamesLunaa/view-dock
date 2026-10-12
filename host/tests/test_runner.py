@@ -80,7 +80,14 @@ class FakeDisplayServer:
 
     def __init__(self) -> None:
         self.is_up = False
+        self.input_devices: list[str] = []
         FakeDisplayServer.instances.append(self)
+
+    def create_input_injector(self, config, device_name: str):
+        return None
+
+    def attach_input_device(self, device_name: str) -> None:
+        self.input_devices.append(device_name)
 
     def create_virtual_display(self, config) -> None:
         if FakeDisplayServer.fail_next:
@@ -219,6 +226,9 @@ def test_two_clients_stream_at_once_each_with_its_own_display():
         assert first.display_server is not second.display_server
         assert first.input_injector is not second.input_injector
         assert first.input_injector.name != second.input_injector.name
+        # Each display is told which touch device belongs to it (Wayland maps it onto the output).
+        assert first.display_server.input_devices == [first.input_injector.name]
+        assert second.display_server.input_devices == [second.input_injector.name]
         assert FakeDisplayServer.created == 2
         assert sorted(runner.client_labels) == ["Wi-Fi 10.0.0.2", "Wi-Fi 10.0.0.3"]
         assert states[-1].state is State.CONNECTED

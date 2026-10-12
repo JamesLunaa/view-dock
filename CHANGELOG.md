@@ -9,6 +9,27 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
 
 ## [Unreleased]
 
+## [2.3.0](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-12
+
+### Added
+- **KDE Plasma Wayland support on the host.** On a Plasma Wayland session the host now
+  creates the virtual monitor through the desktop's screen-sharing portal (a KWin virtual
+  output, real enough to drag windows onto), sizes and places it with `kscreen-doctor`,
+  captures it from the portal's PipeWire stream, and maps the touch device onto it. Plasma
+  asks for permission the first time and can remember the answer. Per-output scaling works
+  here, so `VIEWDOCK_DISPLAY_SCALE=2` gives a sharp picture at the right size. Needs Plasma
+  6.6+, `gst-plugin-pipewire` and the new `jeepney` Python dependency. KWin rounds the
+  custom width to a multiple of 8 (1180 → 1184); the difference is stretched away. X11 is unchanged;
+  Wayland desktops other than Plasma and GNOME get a clear error. No `protocol/` change, and both apps work with
+  it unchanged. Reported working on Plasma 6.7 over both USB and Wi-Fi; two clients at once
+  on Wayland hasn't been tried.
+- **GNOME Wayland support on the host** (not yet tested on GNOME). The host asks GNOME's
+  portal for a remote-desktop session with a virtual screen; Mutter sizes the monitor from
+  the requested stream size, and touches are sent through the same session as pointer
+  events aimed at that screen. Same dependencies as Plasma (`gst-plugin-pipewire`,
+  `jeepney`). `VIEWDOCK_DISPLAY_SCALE` doesn't set GNOME's scale yet, and touch positions
+  assume 100% scale.
+
 ## [2.2.0](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-07
 
 ### Added

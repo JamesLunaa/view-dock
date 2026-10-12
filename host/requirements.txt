@@ -29,6 +29,11 @@ python-xlib>=0.33
 # Input injection
 python-uinput>=0.11.2
 
+# Wayland (KDE Plasma): D-Bus calls to the ScreenCast portal and KWin (see
+# displayserver/portal.py). Frames come through gst-launch-1.0, a system
+# package (gst-plugin-pipewire), not a Python dependency.
+jeepney>=0.8
+
 # Optional: KDE tray applet (host/gui/), an alternative to the TUI
 # (host/ui/). Not needed to run the host itself or the TUI — only install
 # this if you want `python -m host.gui`. Sizeable (~500MB installed).

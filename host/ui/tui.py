@@ -26,7 +26,7 @@ from host.config import HostConfig
 from host.displayserver.x11 import X11DisplayServer
 from host.netinfo import wifi_address_text
 from host.presets import build_presets
-from host.runner import HostRunner, State, StatusEvent
+from host.runner import HostRunner, State, StatusEvent, uses_x11_display_server
 from host.transport.wifi import DEFAULT_PORT
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ class HostUi:
         preset = self._presets[self._selected]
         display_config = preset.display if preset.display is not None else HostConfig.default().display
 
-        if X11DisplayServer.find_available_output() is None:
+        if uses_x11_display_server() and X11DisplayServer.find_available_output() is None:
             candidates = X11DisplayServer.list_disconnected_outputs()
             hint = f" Candidates: {', '.join(candidates)}." if candidates else ""
             self._log_lines.append(

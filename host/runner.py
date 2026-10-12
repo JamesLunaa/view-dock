@@ -27,10 +27,13 @@ from websockets.exceptions import ConnectionClosed
 from host.config import DisplayConfig, HostConfig, max_clients_from_env
 from host.displayserver import (
     DisplayServer,
+    GnomeWaylandDisplayServer,
+    KWinWaylandDisplayServer,
     PassthroughDisplayServer,
     TestPatternDisplayServer,
     X11DisplayServer,
 )
+from host.displayserver.wayland import is_gnome_session, is_kde_session, is_wayland_session
 from host.input.injector import InputInjector
 from host.streaming import WebRtcSession, WiredSession
 from host.transport import AdbTransport, Transport, UsbTransport, WifiListener
@@ -63,11 +66,30 @@ _USB_POLL_S = 1.0
 _DEFAULT_DISPLAY_LINGER_S = 15.0
 
 
+def uses_x11_display_server() -> bool:
+    """True when choose_display_server() will pick X11DisplayServer, i.e. the
+    session needs a spare output (forced connector) before starting."""
+    return not (
+        os.environ.get("VIEWDOCK_TEST_PATTERN_DISPLAY")
+        or os.environ.get("VIEWDOCK_PASSTHROUGH_DISPLAY")
+        or is_wayland_session()
+    )
+
+
 def choose_display_server() -> DisplayServer:
     if os.environ.get("VIEWDOCK_TEST_PATTERN_DISPLAY"):
         return TestPatternDisplayServer()
     if os.environ.get("VIEWDOCK_PASSTHROUGH_DISPLAY"):
         return PassthroughDisplayServer()
+    if is_wayland_session():
+        if is_kde_session():
+            return KWinWaylandDisplayServer()
+        if is_gnome_session():
+            return GnomeWaylandDisplayServer()
+        raise RuntimeError(
+            "This Wayland desktop isn't supported yet (only KDE Plasma and GNOME are). "
+            "Log in to an X11 session instead."
+        )
     return X11DisplayServer()
 
 
@@ -343,7 +365,11 @@ class HostRunner:
             # xrandr calls and waits for the kernel to re-probe: off the event
             # loop, or every other client's stream stalls while this runs.
             await loop.run_in_executor(None, server.create_virtual_display, self._config.display)
-            injector = InputInjector(self._config.display, name=f"view-dock-client-{next(self._display_ids)}")
+            name = f"view-dock-client-{next(self._display_ids)}"
+            injector = server.create_input_injector(self._config.display, name)
+            if injector is None:
+                injector = InputInjector(self._config.display, name=name)
+                await loop.run_in_executor(None, server.attach_input_device, name)
         return _Display(server, injector)
 
     async def _release_display(self, display: _Display) -> None:

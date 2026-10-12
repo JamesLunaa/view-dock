@@ -33,7 +33,7 @@ from host.config import HostConfig
 from host.displayserver.x11 import X11DisplayServer
 from host.gui.window import HostWindow
 from host.presets import Preset, build_presets
-from host.runner import HostRunner, State, StatusEvent
+from host.runner import HostRunner, State, StatusEvent, uses_x11_display_server
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +271,7 @@ class TrayApp:
 
         display_config = self._selected.display if self._selected.display is not None else HostConfig.default().display
 
-        if X11DisplayServer.find_available_output() is None:
+        if uses_x11_display_server() and X11DisplayServer.find_available_output() is None:
             candidates = X11DisplayServer.list_disconnected_outputs()
             hint = f" Candidates: {', '.join(candidates)}." if candidates else ""
             self._tray.showMessage(

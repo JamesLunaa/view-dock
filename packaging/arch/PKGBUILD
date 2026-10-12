@@ -18,6 +18,7 @@ depends=(
   'python-xlib'
   'python-aiortc'   # AUR
   'python-uinput'   # AUR
+  'python-jeepney'
   'ffmpeg'
   'xorg-server'
   'xorg-xrandr'
@@ -28,6 +29,7 @@ optdepends=(
   'libimobiledevice: iPad over USB'
   'android-tools: Android over USB (adb forward)'
   'pyside6: tray applet (python -m host.gui)'
+  'gst-plugin-pipewire: Wayland sessions (KDE Plasma, GNOME)'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('3726605361523c31b4334b2662728407311274a0ce0d46ed8abbebf50c5accb6')
