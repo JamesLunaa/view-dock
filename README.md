@@ -126,9 +126,10 @@ likely fine but haven't been confirmed. If yours doesn't work, please
 | | Tested configuration | Notes |
 |---|---|---|
 | **Host** | Arch Linux, KDE Plasma 6.7, **Xorg** (X11) or **Wayland** session | On Xorg the virtual-display approach relies on forcing a GPU connector "on" at the kernel/DRM level so KDE's `kscreen` treats it as a real monitor — see `host/README.md`'s "Real GPU output on an Xorg desktop" for why. On Wayland the host uses a different, portal-based path with no connector forcing (see `host/README.md`'s "KDE Plasma on Wayland"); it works over both USB and Wi-Fi. Other distros should work. On Xorg, other desktops and window managers should too (the connector-forcing step works at the kernel level; only a small notification to KDE's `kscreen` is KDE-specific). On Wayland, KDE Plasma (tested) and GNOME (not yet tested) are supported. |
-| **iPad** | iPad Air 11" (M3), iPadOS 26.6 | Wi-Fi and the USB wired stream (video through the cable, 60 fps) both verified on this device. The Xcode project's deployment target is iOS 17.0, so earlier iPadOS versions and other iPad models should work in principle, but only this specific device/OS combination has actually been run. |
+| **iPad** | iPad Air 11" (M3), iPadOS 26.6 and 27.0.1 | Wi-Fi and the USB wired stream (video through the cable, 60 fps) both verified on this device. The Xcode project's deployment target is iOS 17.0, so earlier iPadOS versions and other iPad models should work in principle, but only this specific device/OS combination has actually been run. |
 | **Android** | vivo Y28 (V2352), Funtouch OS 15 (Android 15), phone — USB and Wi-Fi both verified | `minSdk` is 26 (Android 8.0), so other versions and devices, including tablets, should work in principle, but only this device has actually been run. The host's "Android tablet" size preset is a guess, untested. |
 | **Mac** (to build the iPad app only) | Any recent Xcode with the iOS 17 SDK | No specific Xcode version is pinned; building requires [XcodeGen](https://github.com/yonaskolb/XcodeGen) and a free or paid Apple Developer account to code-sign onto a physical device (the iPad app hasn't been run in the Simulator — WebRTC/video needs real hardware). |
+| **Linux** (to build the iPad app without a Mac) | Arch Linux, [xtool](https://xtool.sh) 1.21.0, Swift 6.4.0, SDK from Xcode 27.1 RC | Built and installed over USB with a free Apple ID; the app worked on the iPad above. See `ipad/README.md`'s "Building on Linux with xtool". |
 
 ## Requirements
 
@@ -184,7 +185,12 @@ likely fine but haven't been confirmed. If yours doesn't work, please
 **Building the Android app** (any machine; no Mac needed): JDK 17 or later and
 the Android SDK (platform 37 and build-tools). See `android/README.md`.
 
-**Mac, to build the iPad app:**
+**To build the iPad app**, either a Mac or Linux:
+
+**Linux (no Mac):** [xtool](https://xtool.sh), the Swift 6.4 toolchain, an
+`Xcode.xip` download (for the iOS SDK) and an Apple ID. See `ipad/README.md`.
+
+**Mac:**
 - Xcode, with [XcodeGen](https://github.com/yonaskolb/XcodeGen) installed
   (`brew install xcodegen`).
 - A free or paid Apple Developer account, to code-sign the app for your
@@ -313,7 +319,19 @@ force-connected automatically at every boot. Once that's in place, the app
 icon is the entire host-side workflow: click it, start the session from the
 window that opens, done.
 
-### 3. iPad app setup (on a Mac)
+### 3. iPad app setup
+
+**On Linux (no Mac):** with [xtool](https://xtool.sh) set up as described in
+`ipad/README.md` ("Building on Linux with xtool"), plug in the iPad and run:
+
+```sh
+cd view-dock/ipad/xtool
+xtool dev
+```
+
+That builds the app, signs it with your Apple ID and installs it over USB.
+
+**On a Mac:**
 
 ```sh
 git clone https://github.com/JamesLunaa/view-dock.git

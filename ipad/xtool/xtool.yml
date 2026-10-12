@@ -1,0 +1,7 @@
+version: 1
+bundleID: dev.viewdock.ipad
+infoPath: Info.plist
+iconPath: ../Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png
+resources:
+  # Copied to Legal/ in the app bundle (AppInfo.legalSubdirectory).
+  - ../Resources/Legal

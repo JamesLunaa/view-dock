@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged over xtool's defaults. Keep in step with the `info` and version settings in ../project.yml. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleShortVersionString</key>
+	<string>2.0.3</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>UIDeviceFamily</key>
+	<array>
+		<integer>2</integer>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>view-dock discovers and connects to the view-dock host on your local network to use your iPad as a second display.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_viewdock._tcp</string>
+	</array>
+</dict>
+</plist>
