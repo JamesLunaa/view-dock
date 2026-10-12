@@ -34,6 +34,13 @@ class DisplayServer(ABC):
         uint8 BGRA array. Only valid when `supports_bgra_capture` is True."""
         raise NotImplementedError
 
+    def create_input_injector(self, config: DisplayConfig, device_name: str):
+        """An injector of this display server's own (same interface as
+        `host.input.injector.InputInjector`), or None to use a uinput device —
+        the default. GNOME on Wayland sends input through its portal session
+        instead."""
+        return None
+
     def attach_input_device(self, device_name: str) -> None:
         """Called with the name of the uinput device created for this display,
         for display servers that must be told which output its touches belong

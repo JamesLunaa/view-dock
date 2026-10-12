@@ -31,7 +31,14 @@ logger = logging.getLogger(__name__)
 _FIRST_FRAME_TIMEOUT_S = 10.0
 
 
-def build_pipeline(fd: int, node_id: int, width: int, height: int, letterbox: bool = False) -> list[str]:
+def build_pipeline(
+    fd: int, node_id: int, width: int, height: int, letterbox: bool = False, negotiate_size: bool = False
+) -> list[str]:
+    # With `negotiate_size` the size is asked of the compositor itself, which
+    # matters on GNOME: Mutter gives a virtual monitor whatever size its
+    # stream is negotiated at. (KWin's stream follows the output's mode and
+    # would refuse a size it doesn't have, so there it's left open.)
+    requested = [f"video/x-raw,width={width},height={height}", "!"] if negotiate_size else []
     return [
         "gst-launch-1.0",
         "-q",
@@ -40,6 +47,7 @@ def build_pipeline(fd: int, node_id: int, width: int, height: int, letterbox: bo
         f"path={node_id}",
         "always-copy=true",
         "!",
+        *requested,
         "videoconvert",
         "!",
         "videoscale",
@@ -61,14 +69,16 @@ def pipewire_gstreamer_available() -> bool:
 
 
 class PipeWireFrameReader:
-    def __init__(self, fd: int, node_id: int, width: int, height: int, letterbox: bool = False) -> None:
+    def __init__(
+        self, fd: int, node_id: int, width: int, height: int, letterbox: bool = False, negotiate_size: bool = False
+    ) -> None:
         self._shape = (height, width, 4)
         self._frame_bytes = width * height * 4
         self._latest: np.ndarray | None = None
         self._first_frame = threading.Event()
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=20)
         self._proc = subprocess.Popen(
-            build_pipeline(fd, node_id, width, height, letterbox),
+            build_pipeline(fd, node_id, width, height, letterbox, negotiate_size),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

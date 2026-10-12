@@ -1,13 +1,27 @@
 # view-dock
 
 view-dock turns an iPad or an Android phone/tablet into a real secondary
-display for an Arch Linux machine — not a mirror, an actual extended desktop
-you can drag windows onto — over Wi-Fi (same network) or a wired USB cable. A
-Python host app on Arch creates a virtual display, captures and streams it; a
-native iPadOS app or Android app renders the stream full-screen and forwards
-touch (and Apple Pencil / stylus) input back to the host. Both apps speak the
-same protocol. The host can serve **several devices at once** (up to four by
-default): each one gets its own extended monitor.
+display for a Linux computer — not a mirror, an actual extended desktop you
+can drag windows onto — over Wi-Fi (same network) or a wired USB cable. A
+Python host app on the computer creates a virtual display, captures and
+streams it; a native iPadOS app or Android app renders the stream full-screen
+and forwards touch (and Apple Pencil / stylus) input back to the host. Both
+apps speak the same protocol. The host can serve **several devices at once**
+(up to four by default): each one gets its own extended monitor.
+
+- **Devices:** iPad (iPadOS 17+) and Android phones/tablets (Android 8.0+).
+- **Computer:** Linux running an **Xorg (X11)** or **Wayland** session. On
+  Xorg any distro and desktop should work. On Wayland the desktop has to
+  provide the virtual monitor itself, so it needs desktop-specific support:
+  **KDE Plasma** (6.6+) and **GNOME** (not yet tested). Sway and other
+  wlroots desktops are planned.
+
+> **Tested only on Arch Linux with KDE Plasma** (on both Xorg and Wayland).
+> Other distros and desktops should work but haven't been tried. If something
+> doesn't work on your setup, please
+> [open an issue](https://github.com/JamesLunaa/view-dock/issues) or
+> [start a discussion](https://github.com/JamesLunaa/view-dock/discussions) —
+> reports from other setups are very welcome.
 
 <p align="center">
   <img src="docs/demo.gif" alt="A window is dragged off an Arch Linux laptop's desktop onto an iPad beside it, then an Android phone finds the host and up to four devices connect at once" width="800">
@@ -51,7 +65,8 @@ same wired stream, verified on an iPad Air 11" (M3).
 - Wi-Fi discovery (the apps list hosts on the network) works on Android (reported) but has not yet been tried
   on an iPad; it needs a network that lets devices talk to each other (guest
   networks and "AP isolation" block it). The manual IP field is always there as a fallback.
-- Wayland: only KDE Plasma (6.6+) is supported. Other Wayland desktops (GNOME, Sway, …)
+- Wayland: KDE Plasma (6.6+) and GNOME are supported; GNOME support is new and **hasn't
+  been tested on a real GNOME desktop yet**. Other Wayland desktops (Sway, Hyprland, …)
   aren't — use an X11 session there. Two clients at once on Wayland hasn't been tried.
 - Android: landscape only. Keep the app in the foreground — while it is in the
   background the picture pauses, and it is meant to resume (via a fresh
@@ -104,27 +119,32 @@ report.
 This is a two-machine project; both sides have their own tested
 configuration. "Tested" below means verified working on real hardware, not
 just expected to work — other configurations in the same ballpark are
-likely fine but haven't been confirmed.
+likely fine but haven't been confirmed. If yours doesn't work, please
+[open an issue](https://github.com/JamesLunaa/view-dock/issues) or
+[start a discussion](https://github.com/JamesLunaa/view-dock/discussions).
 
 | | Tested configuration | Notes |
 |---|---|---|
-| **Host** | Arch Linux, KDE Plasma 6.7, **Xorg** (X11) or **Wayland** session | On Xorg the virtual-display approach relies on forcing a GPU connector "on" at the kernel/DRM level so KDE's `kscreen` treats it as a real monitor — see `host/README.md`'s "Real GPU output on an Xorg desktop" for why. On Wayland the host uses a different, portal-based path with no connector forcing (see `host/README.md`'s "KDE Plasma on Wayland"); it works over both USB and Wi-Fi. Other X11 window managers/desktop environments likely work for the core display pipeline, but the kscreen-specific connector-forcing step is KDE-specific and untested elsewhere. |
+| **Host** | Arch Linux, KDE Plasma 6.7, **Xorg** (X11) or **Wayland** session | On Xorg the virtual-display approach relies on forcing a GPU connector "on" at the kernel/DRM level so KDE's `kscreen` treats it as a real monitor — see `host/README.md`'s "Real GPU output on an Xorg desktop" for why. On Wayland the host uses a different, portal-based path with no connector forcing (see `host/README.md`'s "KDE Plasma on Wayland"); it works over both USB and Wi-Fi. Other distros should work. On Xorg, other desktops and window managers should too (the connector-forcing step works at the kernel level; only a small notification to KDE's `kscreen` is KDE-specific). On Wayland, KDE Plasma (tested) and GNOME (not yet tested) are supported. |
 | **iPad** | iPad Air 11" (M3), iPadOS 26.6 | Wi-Fi and the USB wired stream (video through the cable, 60 fps) both verified on this device. The Xcode project's deployment target is iOS 17.0, so earlier iPadOS versions and other iPad models should work in principle, but only this specific device/OS combination has actually been run. |
 | **Android** | vivo Y28 (V2352), Funtouch OS 15 (Android 15), phone — USB and Wi-Fi both verified | `minSdk` is 26 (Android 8.0), so other versions and devices, including tablets, should work in principle, but only this device has actually been run. The host's "Android tablet" size preset is a guess, untested. |
 | **Mac** (to build the iPad app only) | Any recent Xcode with the iOS 17 SDK | No specific Xcode version is pinned; building requires [XcodeGen](https://github.com/yonaskolb/XcodeGen) and a free or paid Apple Developer account to code-sign onto a physical device (the iPad app hasn't been run in the Simulator — WebRTC/video needs real hardware). |
 
 ## Requirements
 
-**Host (Arch Linux):**
-- X11 session (KDE Plasma on Xorg is the tested desktop — see Compatibility
-  above), or a KDE Plasma 6.6+ Wayland session (also needs
-  `gst-plugin-pipewire`). Other Wayland desktops aren't supported yet.
-- System packages: `xorg-server`, `xorg-xrandr`, `xf86-video-dummy`, `ffmpeg`.
+**Host (Linux):**
+- An Xorg (X11) session with any desktop, or a KDE Plasma 6.6+ or GNOME
+  Wayland session. Other Wayland desktops aren't supported yet. (Tested: Arch Linux,
+  KDE Plasma — see Compatibility above.)
+- System packages (Arch names; see "Other distros" below for the others):
+  `xorg-server`, `xorg-xrandr`, `xf86-video-dummy`, `ffmpeg`, plus
+  `gst-plugin-pipewire` for Wayland.
 - Python 3.11+.
-- For USB: `usbmuxd` + `libimobiledevice`, specifically the AUR `-git`
-  builds — see `host/README.md`'s Requirements section for why the official
-  Arch packages don't work with recent iPadOS, and a known side effect of
-  installing the `-git` ones.
+- For iPad over USB: `usbmuxd` + `libimobiledevice`, recent enough to pair
+  with iPadOS 17+. On Arch that means the AUR `-git` builds — see
+  `host/README.md`'s Requirements section for why the official Arch packages
+  don't work with recent iPadOS, and a known side effect of installing the
+  `-git` ones.
 - For Android over USB: `android-tools` (provides `adb`), and USB debugging
   enabled on the device. Not needed for Wi-Fi.
 - The `uinput` kernel module loaded (`sudo modprobe uinput`) for touch/Pencil
@@ -172,7 +192,11 @@ the Android SDK (platform 37 and build-tools). See `android/README.md`.
 
 ## Installation
 
-### 1. Host setup (on the Arch Linux machine)
+### 1. Host setup (on the Linux computer)
+
+The commands below are for Arch Linux, the tested distro. For other distros,
+swap the system-package lines for the ones in "Other distros" below; the
+Python steps are the same everywhere.
 
 ```sh
 git clone https://github.com/JamesLunaa/view-dock.git
@@ -180,6 +204,7 @@ cd view-dock
 
 # System packages
 sudo pacman -S xorg-server xorg-xrandr xf86-video-dummy ffmpeg
+sudo pacman -S gst-plugin-pipewire   # only for a Wayland session
 yay -S usbmuxd-git libimobiledevice-git libusbmuxd-git libplist-git libimobiledevice-glue-git
 
 # Python environment
@@ -223,39 +248,43 @@ working copy) and checks its checksum, so you get that release's code. Then run
 `host/scripts/`. USB support still needs the `-git` `usbmuxd`/`libimobiledevice`
 packages from the first step (for an iPad) or `android-tools` (for Android).
 
-#### Other distros (untested)
+#### Other distros
 
-Only Arch has been verified on real hardware. Nothing in the host code is
-Arch-specific, so other distros should work if they provide the same
-prerequisites — these are the equivalent packages, but none of the rows below
-have been run:
+Nothing in the host code is Arch-specific, so other distros should work if
+they provide the same prerequisites. These are the equivalent packages, but
+none of the rows below have been tried — if one is wrong or something else
+breaks, please [open an issue](https://github.com/JamesLunaa/view-dock/issues)
+or [start a discussion](https://github.com/JamesLunaa/view-dock/discussions).
 
-| Distro | Packages |
-|---|---|
-| Manjaro / EndeavourOS / CachyOS | Same as Arch above. |
-| Debian / Ubuntu / Mint / Pop!_OS | `sudo apt install xserver-xorg-video-dummy x11-xserver-utils ffmpeg usbmuxd libimobiledevice-utils` |
-| Fedora | `sudo dnf install xorg-x11-drv-dummy xrandr ffmpeg usbmuxd libimobiledevice-utils` (full codec support may need RPM Fusion) |
-| openSUSE | `sudo zypper install xf86-video-dummy xrandr ffmpeg usbmuxd libimobiledevice-tools` |
+| Distro | Packages | Extra for Wayland (KDE Plasma or GNOME) |
+|---|---|---|
+| Manjaro / EndeavourOS / CachyOS | Same as Arch above. | `gst-plugin-pipewire` |
+| Debian / Ubuntu / Mint / Pop!_OS | `sudo apt install xserver-xorg-video-dummy x11-xserver-utils ffmpeg usbmuxd libimobiledevice-utils` | `gstreamer1.0-pipewire` |
+| Fedora | `sudo dnf install xorg-x11-drv-dummy xrandr ffmpeg usbmuxd libimobiledevice-utils` (full codec support may need RPM Fusion) | `pipewire-gstreamer` |
+| openSUSE | `sudo zypper install xf86-video-dummy xrandr ffmpeg usbmuxd libimobiledevice-tools` | `gstreamer-plugin-pipewire` |
 
 Things to keep in mind on any distro:
 
-- **Log in to an X11/Xorg session** unless you use KDE Plasma. Of the Wayland
-  desktops only Plasma is supported, and several distros (Ubuntu, Fedora)
-  default to GNOME on Wayland.
+- **Check which session you're in** (`echo $XDG_SESSION_TYPE`). Xorg works
+  with any desktop; on Wayland, KDE Plasma 6.6+ and GNOME are supported
+  (GNOME not yet tested). On another Wayland desktop, pick an Xorg session at
+  the login screen if your distro still offers one.
 - **Packaged `libimobiledevice` may be too old** to pair with iOS 17+/iPadOS 26+
   (see `host/README.md`); USB may need a newer build from source. Wi-Fi is
   unaffected.
-- **The connector-forcing step is untested outside KDE Plasma.** Other desktops
-  may or may not need it.
+- **The connector-forcing step (Xorg only) is untested outside KDE Plasma.**
+  Other desktops may or may not need it.
 - For Android USB, install `adb` (Debian/Ubuntu: `adb`; Fedora/openSUSE:
   `android-tools`) — also untested there.
 - Python 3.11+ and the `uinput` setup above apply everywhere.
 
-Then follow `host/README.md`'s "Real GPU output on an Xorg desktop" section
+On **Xorg**, then follow `host/README.md`'s "Real GPU output on an Xorg desktop" section
 once, to set up the virtual display's connector — it's the one step that
 can't be fully automated (it writes to a kernel debugfs file under `sudo`),
 and needs re-running after every reboot unless you add the suggested kernel
-command-line option for a permanent fix.
+command-line option for a permanent fix. On **Wayland** (KDE Plasma or GNOME) there is no such
+step: the desktop asks for permission the first time the host starts a display
+(see `host/README.md`'s "KDE Plasma on Wayland" and "GNOME on Wayland").
 
 ### 2. App icon for the host GUI (optional, recommended)
 

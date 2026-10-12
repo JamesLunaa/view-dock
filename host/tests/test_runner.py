@@ -83,6 +83,9 @@ class FakeDisplayServer:
         self.input_devices: list[str] = []
         FakeDisplayServer.instances.append(self)
 
+    def create_input_injector(self, config, device_name: str):
+        return None
+
     def attach_input_device(self, device_name: str) -> None:
         self.input_devices.append(device_name)
 

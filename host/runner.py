@@ -27,12 +27,13 @@ from websockets.exceptions import ConnectionClosed
 from host.config import DisplayConfig, HostConfig, max_clients_from_env
 from host.displayserver import (
     DisplayServer,
+    GnomeWaylandDisplayServer,
     KWinWaylandDisplayServer,
     PassthroughDisplayServer,
     TestPatternDisplayServer,
     X11DisplayServer,
 )
-from host.displayserver.wayland import is_kde_session, is_wayland_session
+from host.displayserver.wayland import is_gnome_session, is_kde_session, is_wayland_session
 from host.input.injector import InputInjector
 from host.streaming import WebRtcSession, WiredSession
 from host.transport import AdbTransport, Transport, UsbTransport, WifiListener
@@ -83,8 +84,10 @@ def choose_display_server() -> DisplayServer:
     if is_wayland_session():
         if is_kde_session():
             return KWinWaylandDisplayServer()
+        if is_gnome_session():
+            return GnomeWaylandDisplayServer()
         raise RuntimeError(
-            "This Wayland desktop isn't supported yet (only KDE Plasma is). "
+            "This Wayland desktop isn't supported yet (only KDE Plasma and GNOME are). "
             "Log in to an X11 session instead."
         )
     return X11DisplayServer()
@@ -363,8 +366,10 @@ class HostRunner:
             # loop, or every other client's stream stalls while this runs.
             await loop.run_in_executor(None, server.create_virtual_display, self._config.display)
             name = f"view-dock-client-{next(self._display_ids)}"
-            injector = InputInjector(self._config.display, name=name)
-            await loop.run_in_executor(None, server.attach_input_device, name)
+            injector = server.create_input_injector(self._config.display, name)
+            if injector is None:
+                injector = InputInjector(self._config.display, name=name)
+                await loop.run_in_executor(None, server.attach_input_device, name)
         return _Display(server, injector)
 
     async def _release_display(self, display: _Display) -> None:

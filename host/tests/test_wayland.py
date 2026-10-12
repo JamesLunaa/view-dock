@@ -12,16 +12,20 @@ gst-launch-1.0.
 import os
 import subprocess
 import sys
+import threading
 import time
 from unittest.mock import patch
 
 import numpy as np
 import pytest
+from jeepney.low_level import HeaderFields, MessageFlag
 
 from host import runner
 from host.config import DisplayConfig
 from host.displayserver import pipewire_capture, portal, wayland
-from host.displayserver.wayland import KWinWaylandDisplayServer
+from host.displayserver.wayland import GnomeWaylandDisplayServer, KWinWaylandDisplayServer
+from host.input.portal_injector import PortalPointerInjector
+from protocol import messages
 
 
 def _output(oid, name, x=0, width=1920, height=1080, scale=1, enabled=True, priority=0, modes=()):
@@ -45,6 +49,8 @@ def _output(oid, name, x=0, width=1920, height=1080, scale=1, enabled=True, prio
         ({"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE"}, KWinWaylandDisplayServer),
         ({"XDG_SESSION_TYPE": "x11", "XDG_CURRENT_DESKTOP": "KDE", "WAYLAND_DISPLAY": "wayland-0"}, runner.X11DisplayServer),
         ({"WAYLAND_DISPLAY": "wayland-0", "XDG_CURRENT_DESKTOP": "ubuntu:KDE"}, KWinWaylandDisplayServer),
+        ({"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "ubuntu:GNOME"}, GnomeWaylandDisplayServer),
+        ({"XDG_SESSION_TYPE": "x11", "XDG_CURRENT_DESKTOP": "GNOME"}, runner.X11DisplayServer),
     ],
 )
 def test_display_server_follows_the_session_type(env, expected):
@@ -53,8 +59,8 @@ def test_display_server_follows_the_session_type(env, expected):
 
 
 def test_unsupported_wayland_desktop_says_so():
-    env = {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "GNOME"}
-    with patch.dict(os.environ, env, clear=True), pytest.raises(RuntimeError, match="KDE Plasma"):
+    env = {"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "sway"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(RuntimeError, match="KDE Plasma and GNOME"):
         runner.choose_display_server()
 
 
@@ -173,3 +179,78 @@ def test_frame_reader_reports_why_the_stream_died():
     finally:
         os.close(read_fd)
         os.close(write_fd)
+
+
+def test_gnome_pipeline_asks_the_compositor_for_the_device_size_but_kde_does_not():
+    gnome = pipewire_capture.build_pipeline(9, 42, 1180, 820, negotiate_size=True)
+    kde = pipewire_capture.build_pipeline(9, 42, 1180, 820)
+    requested = "video/x-raw,width=1180,height=820"
+    # Right after the source, so it drives the negotiation with Mutter.
+    assert gnome[gnome.index("pipewiresrc") + 4 : gnome.index("pipewiresrc") + 6] == ["!", requested]
+    assert requested not in kde
+    assert kde[-5] == "video/x-raw,format=BGRx,width=1180,height=820"
+
+
+def test_restore_tokens_are_kept_per_session_kind(tmp_path):
+    with patch.dict(os.environ, {"XDG_STATE_HOME": str(tmp_path)}):
+        portal.save_restore_token("screen", remote_desktop=False)
+        portal.save_restore_token("remote", remote_desktop=True)
+        assert portal.load_restore_token(remote_desktop=False) == "screen"
+        assert portal.load_restore_token(remote_desktop=True) == "remote"
+
+
+class FakePortal:
+    def __init__(self):
+        self.calls = []
+
+    def pointer_motion_absolute(self, node_id, x, y):
+        self.calls.append(("move", node_id, x, y))
+
+    def pointer_button(self, button, pressed):
+        self.calls.append(("button", button, pressed))
+
+
+def _event(kind, x, y):
+    return {"type": "input_event", "kind": kind, "x": x, "y": y, "timestamp_ms": 0}
+
+
+def test_portal_injector_drags_with_the_left_button_in_stream_pixels():
+    fake = FakePortal()
+    injector = PortalPointerInjector(fake, 42, DisplayConfig(width=1181, height=821))
+    injector.handle_input_event(_event(messages.INPUT_KIND_TOUCH_DOWN, 0.0, 0.0))
+    injector.handle_input_event(_event(messages.INPUT_KIND_TOUCH_MOVE, 0.5, 0.5))
+    injector.handle_input_event(_event(messages.INPUT_KIND_PENCIL_UP, 1.0, 1.2))
+    assert fake.calls == [
+        ("move", 42, 0.0, 0.0),
+        ("button", portal.BTN_LEFT, True),
+        ("move", 42, 590.0, 410.0),
+        ("move", 42, 1180.0, 820.0),  # clamped onto the last pixel
+        ("button", portal.BTN_LEFT, False),
+    ]
+
+
+def test_gnome_supplies_its_own_injector_and_kde_keeps_uinput():
+    gnome = GnomeWaylandDisplayServer()
+    gnome._portal, gnome._stream = FakePortal(), portal.PortalStream(node_id=7, width=None, height=None)
+    assert isinstance(gnome.create_input_injector(DisplayConfig(), "dev"), PortalPointerInjector)
+    assert KWinWaylandDisplayServer().create_input_injector(DisplayConfig(), "dev") is None
+
+
+def test_pointer_notifications_are_fire_and_forget():
+    sent = []
+
+    class FakeConn:
+        def send(self, msg):
+            sent.append(msg)
+
+    session = portal.ScreenCastPortal.__new__(portal.ScreenCastPortal)
+    session._conn, session._session = FakeConn(), "/org/freedesktop/portal/desktop/session/1_2/x"
+    session._send_lock = threading.Lock()
+    session.pointer_motion_absolute(42, 10, 20.5)
+    session.pointer_button(portal.BTN_LEFT, True)
+
+    move, press = sent
+    assert move.header.fields[HeaderFields.member] == "NotifyPointerMotionAbsolute"
+    assert move.body == (session._session, {}, 42, 10.0, 20.5)
+    assert press.body == (session._session, {}, portal.BTN_LEFT, 1)
+    assert all(m.header.flags & MessageFlag.no_reply_expected for m in sent)

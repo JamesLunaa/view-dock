@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 James Luna
 
-"""Wayland implementation of DisplayServer, for KDE Plasma (KWin).
+"""Wayland implementations of DisplayServer, for KDE Plasma (KWin) and GNOME
+(Mutter).
 
 On Wayland only the compositor can create outputs or read the screen, so
-each piece the X11 path does by hand goes through KDE instead:
+each piece the X11 path does by hand goes through the desktop instead. Both
+desktops get the monitor and its frames the same way (`_PortalDisplayServer`);
+they differ in sizing and input. GNOME is described on its class below; on
+KDE:
 
 - The virtual monitor comes from the ScreenCast portal's "virtual" source
   (`portal.py`). KWin creates a real output for it — windows can be placed
@@ -20,8 +24,8 @@ each piece the X11 path does by hand goes through KDE instead:
   KWin is told over D-Bus to map that device onto the virtual output, the
   same setting as "Target display" in System Settings > Touchscreen.
 
-Needs Plasma 6.6+ (for kscreen-doctor's addCustomMode), `gst-plugin-pipewire`
-and `jeepney`.
+KDE needs Plasma 6.6+ (for kscreen-doctor's addCustomMode). Both need
+`gst-plugin-pipewire` and `jeepney`.
 """
 
 import json
@@ -57,8 +61,16 @@ def is_wayland_session() -> bool:
     return bool(os.environ.get("WAYLAND_DISPLAY"))
 
 
+def _desktops() -> list[str]:
+    return os.environ.get("XDG_CURRENT_DESKTOP", "").upper().split(":")
+
+
+def is_gnome_session() -> bool:
+    return "GNOME" in _desktops()
+
+
 def is_kde_session() -> bool:
-    return "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper().split(":")
+    return "KDE" in _desktops()
 
 
 def kscreen_outputs() -> list[dict]:
@@ -125,33 +137,98 @@ def map_touch_device_to_output(device_name: str, output_name: str) -> bool:
         conn.close()
 
 
-class KWinWaylandDisplayServer(DisplayServer):
+def _require_pipewire_gstreamer() -> None:
+    if not pipewire_gstreamer_available():
+        raise RuntimeError(
+            "GStreamer's PipeWire plugin is missing; install it with `sudo pacman -S gst-plugin-pipewire` "
+            "(Debian/Ubuntu: gstreamer1.0-pipewire, Fedora: pipewire-gstreamer)."
+        )
+
+
+class _PortalDisplayServer(DisplayServer):
+    """What the Wayland desktops share: a portal session owning the virtual
+    monitor, and capture from its PipeWire stream. Ending the session is what
+    removes the monitor."""
+
     supports_bgra_capture = True
 
     def __init__(self) -> None:
         self._portal: portal.ScreenCastPortal | None = None
         self._reader: PipeWireFrameReader | None = None
+        self._stream: portal.PortalStream | None = None
+
+    def _start_portal(self, remote_desktop: bool) -> None:
+        self._portal = portal.ScreenCastPortal()
+        self._stream, token = self._portal.start_virtual(portal.load_restore_token(remote_desktop), remote_desktop)
+        if token:
+            portal.save_restore_token(token, remote_desktop)
+
+    def _open_capture(self, config: DisplayConfig, **reader_options) -> None:
+        fd = self._portal.open_pipewire_remote()
+        try:
+            self._reader = PipeWireFrameReader(
+                fd, self._stream.node_id, config.capture_width, config.capture_height, **reader_options
+            )
+        finally:
+            os.close(fd)  # the child process holds its own copy
+
+    def capture_frame(self) -> np.ndarray:
+        return self.capture_frame_bgra()[:, :, [2, 1, 0]]
+
+    def capture_frame_bgra(self) -> np.ndarray:
+        if self._reader is None:
+            raise RuntimeError("Display not created; call create_virtual_display() first.")
+        return self._reader.latest_bgra()
+
+    def destroy_virtual_display(self) -> None:
+        if self._reader is not None:
+            self._reader.close()
+            self._reader = None
+        if self._portal is not None:
+            self._portal.close()
+            self._portal = None
+        self._stream = None
+
+
+class GnomeWaylandDisplayServer(_PortalDisplayServer):
+    """GNOME (Mutter). The virtual monitor comes from a RemoteDesktop portal
+    session with a virtual screen-cast source; Mutter sizes it from the
+    stream's negotiated format, so asking for the device's size in the
+    capture pipeline is all the setup it needs. Touches go through the same
+    session as pointer events aimed at the stream (`PortalPointerInjector`):
+    GNOME can only pin a touchscreen to a monitor with an EDID, which a
+    virtual one doesn't have."""
+
+    def create_virtual_display(self, config: DisplayConfig) -> None:
+        _require_pipewire_gstreamer()
+        try:
+            self._start_portal(remote_desktop=True)
+            self._open_capture(config, negotiate_size=True)
+        except BaseException:
+            self.destroy_virtual_display()
+            raise
+        logger.info("Virtual display created through the remote-desktop portal.")
+
+    def create_input_injector(self, config: DisplayConfig, device_name: str):
+        from host.input.portal_injector import PortalPointerInjector
+
+        return PortalPointerInjector(self._portal, self._stream.node_id, config)
+
+
+class KWinWaylandDisplayServer(_PortalDisplayServer):
+    def __init__(self) -> None:
+        super().__init__()
         self._output_name: str | None = None
 
     def create_virtual_display(self, config: DisplayConfig) -> None:
         self._check_prerequisites()
         before = {o["name"] for o in kscreen_outputs()}
-
-        self._portal = portal.ScreenCastPortal()
         try:
-            stream, token = self._portal.start_virtual(portal.load_restore_token())
-            if token:
-                portal.save_restore_token(token)
+            self._start_portal(remote_desktop=False)
             output = self._wait_for_output(before)
             self._output_name = output["name"]
             sized = self._configure_output(output, config)
-            fd = self._portal.open_pipewire_remote()
-            try:
-                self._reader = PipeWireFrameReader(
-                    fd, stream.node_id, config.capture_width, config.capture_height, letterbox=not sized
-                )
-            finally:
-                os.close(fd)  # the child process holds its own copy
+            self._open_capture(config, letterbox=not sized)
         except BaseException:
             self.destroy_virtual_display()
             raise
@@ -170,32 +247,15 @@ class KWinWaylandDisplayServer(DisplayServer):
         except Exception:
             logger.warning("Couldn't map touch input onto %s; touches may land on the wrong screen.", self._output_name, exc_info=True)
 
-    def capture_frame(self) -> np.ndarray:
-        return self.capture_frame_bgra()[:, :, [2, 1, 0]]
-
-    def capture_frame_bgra(self) -> np.ndarray:
-        if self._reader is None:
-            raise RuntimeError("Display not created; call create_virtual_display() first.")
-        return self._reader.latest_bgra()
-
     def destroy_virtual_display(self) -> None:
-        # Ending the portal session is what removes the output in KWin.
-        if self._reader is not None:
-            self._reader.close()
-            self._reader = None
-        if self._portal is not None:
-            self._portal.close()
-            self._portal = None
+        super().destroy_virtual_display()
         self._output_name = None
 
     @staticmethod
     def _check_prerequisites() -> None:
         if shutil.which("kscreen-doctor") is None:
             raise RuntimeError("kscreen-doctor not found; install kscreen (part of KDE Plasma).")
-        if not pipewire_gstreamer_available():
-            raise RuntimeError(
-                "GStreamer's PipeWire plugin is missing; install it with `sudo pacman -S gst-plugin-pipewire`."
-            )
+        _require_pipewire_gstreamer()
 
     @staticmethod
     def _wait_for_output(before: set[str]) -> dict:
