@@ -3,7 +3,7 @@ aiortc>=1.9.0
 av>=13.0.0
 
 # Wi-Fi/USB signaling (SDP/ICE exchange over a WebSocket)
-websockets>=13.0
+websockets>=17.2
 
 # Wi-Fi discovery: advertises the host over mDNS (optional at runtime — if it
 # fails, clients just type the IP; see host/transport/discovery.py)
