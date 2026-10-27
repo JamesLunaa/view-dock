@@ -33,6 +33,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 import time
 
 import numpy as np
@@ -78,10 +79,12 @@ def kscreen_outputs() -> list[dict]:
     return json.loads(result.stdout)["outputs"]
 
 
-def find_new_output(before: set[str], outputs: list[dict]) -> dict | None:
+def find_new_output(before: set[int], outputs: list[dict]) -> dict | None:
     """The output that wasn't there before the portal started, preferring one
-    KWin named as virtual if (unexpectedly) several appeared."""
-    new = [o for o in outputs if o["name"] not in before]
+    KWin named as virtual if (unexpectedly) several appeared. Compared by id:
+    every portal session from the same app gets the same output name, so a
+    second client's output would look like the first one's."""
+    new = [o for o in outputs if o["id"] not in before]
     new.sort(key=lambda o: not o["name"].lower().startswith("virtual"))
     return new[0] if new else None
 
@@ -91,10 +94,10 @@ def logical_size(output: dict) -> tuple[float, float]:
     return output["size"]["width"] / scale, output["size"]["height"] / scale
 
 
-def placement_for(output_name: str, outputs: list[dict]) -> tuple[int, int]:
+def placement_for(output_id: int, outputs: list[dict]) -> tuple[int, int]:
     """Right of every other enabled screen, top-aligned with the primary one,
     so several clients' monitors line up instead of stacking."""
-    others = [o for o in outputs if o.get("enabled") and o["name"] != output_name and o["size"]["width"] > 0]
+    others = [o for o in outputs if o.get("enabled") and o["id"] != output_id and o["size"]["width"] > 0]
     if not others:
         return 0, 0
     right = max(o["pos"]["x"] + logical_size(o)[0] for o in others)
@@ -152,16 +155,39 @@ class _PortalDisplayServer(DisplayServer):
 
     supports_bgra_capture = True
 
+    # Slots taken by live sessions in this process (see portal.py).
+    _slots_in_use: set[int] = set()
+    _slots_lock = threading.Lock()
+
     def __init__(self) -> None:
         self._portal: portal.ScreenCastPortal | None = None
         self._reader: PipeWireFrameReader | None = None
         self._stream: portal.PortalStream | None = None
+        self._slot: int | None = None
+
+    def _take_slot(self) -> int:
+        with self._slots_lock:
+            slot = next(n for n in range(1, len(self._slots_in_use) + 2) if n not in self._slots_in_use)
+            self._slots_in_use.add(slot)
+        self._slot = slot
+        return slot
+
+    def _free_slot(self) -> None:
+        if self._slot is not None:
+            with self._slots_lock:
+                self._slots_in_use.discard(self._slot)
+            self._slot = None
 
     def _start_portal(self, remote_desktop: bool) -> None:
-        self._portal = portal.ScreenCastPortal()
-        self._stream, token = self._portal.start_virtual(portal.load_restore_token(remote_desktop), remote_desktop)
+        slot = self._take_slot()
+        app_id = portal.slot_app_id(slot)
+        if app_id is not None:
+            portal.ensure_desktop_entry(app_id, slot)
+        self._portal = portal.ScreenCastPortal(app_id)
+        restore = portal.load_restore_token(remote_desktop, slot)
+        self._stream, token = self._portal.start_virtual(restore, remote_desktop)
         if token:
-            portal.save_restore_token(token, remote_desktop)
+            portal.save_restore_token(token, remote_desktop, slot)
 
     def _open_capture(self, config: DisplayConfig, **reader_options) -> None:
         fd = self._portal.open_pipewire_remote()
@@ -188,6 +214,7 @@ class _PortalDisplayServer(DisplayServer):
             self._portal.close()
             self._portal = None
         self._stream = None
+        self._free_slot()
 
 
 class GnomeWaylandDisplayServer(_PortalDisplayServer):
@@ -222,7 +249,7 @@ class KWinWaylandDisplayServer(_PortalDisplayServer):
 
     def create_virtual_display(self, config: DisplayConfig) -> None:
         self._check_prerequisites()
-        before = {o["name"] for o in kscreen_outputs()}
+        before = {o["id"] for o in kscreen_outputs()}
         try:
             self._start_portal(remote_desktop=False)
             output = self._wait_for_output(before)
@@ -258,7 +285,7 @@ class KWinWaylandDisplayServer(_PortalDisplayServer):
         _require_pipewire_gstreamer()
 
     @staticmethod
-    def _wait_for_output(before: set[str]) -> dict:
+    def _wait_for_output(before: set[int]) -> dict:
         deadline = time.monotonic() + _OUTPUT_APPEAR_TIMEOUT_S
         while True:
             output = find_new_output(before, kscreen_outputs())
@@ -294,7 +321,7 @@ class KWinWaylandDisplayServer(_PortalDisplayServer):
             )
         else:
             settings.append(f"output.{oid}.mode.{mode_id}")
-        x, y = placement_for(output["name"], kscreen_outputs())
+        x, y = placement_for(oid, kscreen_outputs())
         settings.append(f"output.{oid}.position.{x},{y}")
         result = subprocess.run(["kscreen-doctor", *settings], capture_output=True, text=True)
         if result.returncode != 0:

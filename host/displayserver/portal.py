@@ -26,12 +26,21 @@ as a `Response` signal on that path. The match rule has to be in place before
 the call, or a fast reply can be missed. The D-Bus connection must stay open
 for the session's lifetime — the portal ends the session when its owner goes
 away.
+
+Several clients at once each get their own "slot". The first uses whatever
+app id the portal sees for this process; every later one registers its own
+(`viewdock-host-2`, ...) on its connection. KDE names the virtual output after
+the app id and keeps each output's position and size under that name, so two
+sessions with one id would get two outputs that KWin stacks on top of each
+other. Each slot also keeps its own restore tokens: a token is good for one
+session.
 """
 
 import logging
 import os
 import secrets
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,6 +54,7 @@ logger = logging.getLogger(__name__)
 _PORTAL_PATH = "/org/freedesktop/portal/desktop"
 _PORTAL_BUS = "org.freedesktop.portal.Desktop"
 _SCREENCAST = DBusAddress(_PORTAL_PATH, bus_name=_PORTAL_BUS, interface="org.freedesktop.portal.ScreenCast")
+_REGISTRY = DBusAddress(_PORTAL_PATH, bus_name=_PORTAL_BUS, interface="org.freedesktop.host.portal.Registry")
 _REMOTE_DESKTOP = DBusAddress(_PORTAL_PATH, bus_name=_PORTAL_BUS, interface="org.freedesktop.portal.RemoteDesktop")
 
 SOURCE_VIRTUAL = 4
@@ -62,6 +72,10 @@ _RESPONSE_CANCELLED = 1
 # reading and accepting the permission dialog.
 _CALL_TIMEOUT_S = 10.0
 _START_TIMEOUT_S = 180.0
+# The portal notices a newly written desktop file a moment later.
+_REGISTER_TIMEOUT_S = 3.0
+
+APP_ID_PREFIX = "viewdock-host"
 
 
 class PortalError(RuntimeError):
@@ -75,28 +89,58 @@ class PortalStream:
     height: int | None
 
 
-def restore_token_path(remote_desktop: bool = False) -> Path:
+def slot_app_id(slot: int) -> str | None:
+    """The app id a slot's sessions register; None for the first slot, which
+    keeps the process's own."""
+    return None if slot <= 1 else f"{APP_ID_PREFIX}-{slot}"
+
+
+def restore_token_path(remote_desktop: bool = False, slot: int = 1) -> Path:
     # Separate files: a ScreenCast token isn't valid for a RemoteDesktop session.
     state = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
     name = "remotedesktop-restore-token" if remote_desktop else "screencast-restore-token"
+    if slot > 1:
+        name += f"-{slot}"
     return Path(state) / "view-dock" / name
 
 
-def load_restore_token(remote_desktop: bool = False) -> str | None:
+def load_restore_token(remote_desktop: bool = False, slot: int = 1) -> str | None:
     try:
-        token = restore_token_path(remote_desktop).read_text().strip()
+        token = restore_token_path(remote_desktop, slot).read_text().strip()
     except OSError:
         return None
     return token or None
 
 
-def save_restore_token(token: str, remote_desktop: bool = False) -> None:
-    path = restore_token_path(remote_desktop)
+def save_restore_token(token: str, remote_desktop: bool = False, slot: int = 1) -> None:
+    path = restore_token_path(remote_desktop, slot)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(token)
     except OSError:
         logger.warning("Couldn't save the screen-sharing permission; the desktop will ask again next time.", exc_info=True)
+
+
+def desktop_entry_path(app_id: str) -> Path:
+    data = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return Path(data) / "applications" / f"{app_id}.desktop"
+
+
+def ensure_desktop_entry(app_id: str, slot: int) -> None:
+    """The portal only accepts an app id that has a desktop file. A hidden one
+    is enough; it never shows up in menus."""
+    path = desktop_entry_path(app_id)
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name=view-dock Host (display {slot})\n"
+        "Comment=Lets view-dock give a second device its own virtual display\n"
+        "Exec=true\n"
+        "NoDisplay=true\n"
+    )
 
 
 def parse_streams(results: dict) -> list[PortalStream]:
@@ -113,13 +157,34 @@ class ScreenCastPortal:
     """One portal session. Session setup and teardown happen on one thread;
     the pointer methods may be called from another while it streams."""
 
-    def __init__(self) -> None:
+    def __init__(self, app_id: str | None = None) -> None:
         self._conn = open_dbus_connection(bus="SESSION", enable_fds=True)
         self._bus = Proxy(message_bus, self._conn)
         # The portal builds request paths from the caller's unique name, ":1.42" -> "1_42".
         self._sender = self._conn.unique_name.lstrip(":").replace(".", "_")
         self._session: str | None = None
         self._send_lock = threading.Lock()
+        if app_id is not None:
+            try:
+                self._register(app_id)
+            except BaseException:
+                self._conn.close()
+                raise
+
+    def _register(self, app_id: str) -> None:
+        # Must come before any other portal call on this connection.
+        deadline = time.monotonic() + _REGISTER_TIMEOUT_S
+        while True:
+            reply = self._conn.send_and_get_reply(
+                new_method_call(_REGISTRY, "Register", "sa{sv}", (app_id, {})), timeout=_CALL_TIMEOUT_S
+            )
+            try:
+                unwrap_msg(reply)
+                return
+            except Exception as exc:
+                if time.monotonic() > deadline:
+                    raise PortalError(f"The portal wouldn't take the app id {app_id}: {exc}") from exc
+            time.sleep(0.2)
 
     def start_virtual(
         self, restore_token: str | None, remote_desktop: bool = False
