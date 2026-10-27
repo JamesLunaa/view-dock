@@ -9,6 +9,17 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
 
 ## [Unreleased]
 
+## [2.4.1](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-27
+
+### Fixed
+- **Two devices at once on KDE Plasma Wayland.** A second device used to fail with "no new
+  output appeared in KWin", or both devices showed the same picture, because Plasma gave
+  every virtual monitor from the host the same name and stacked them. Each extra device now
+  gets its own name (the host adds a hidden `viewdock-host-N.desktop` file in
+  `~/.local/share/applications/` for it), its own place to the right of the other screens,
+  and its own remembered permission; Plasma asks once the first time a second device
+  connects. Reported working with an iPad over USB and an Android phone over Wi-Fi.
+
 ## [2.4.0](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-12
 
 ### Added

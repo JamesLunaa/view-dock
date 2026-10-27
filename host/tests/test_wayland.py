@@ -65,10 +65,17 @@ def test_unsupported_wayland_desktop_says_so():
 
 
 def test_new_output_is_the_one_the_portal_added():
-    before = {"eDP-1", "HDMI-A-1"}
+    before = {1, 2}
     outputs = [_output(1, "eDP-1"), _output(2, "HDMI-A-1"), _output(3, "Virtual-Virtual Output")]
     assert wayland.find_new_output(before, outputs)["id"] == 3
-    assert wayland.find_new_output(before | {"Virtual-Virtual Output"}, outputs) is None
+    assert wayland.find_new_output(before | {3}, outputs) is None
+
+
+def test_second_client_output_is_found_despite_sharing_the_first_ones_name():
+    # Every portal session from the same app gets the same output name.
+    outputs = [_output(1, "eDP-1"), _output(2, "Virtual-virtual-xdp-kde-viewdock-host")]
+    outputs.append(_output(3, "Virtual-virtual-xdp-kde-viewdock-host"))
+    assert wayland.find_new_output({1, 2}, outputs)["id"] == 3
 
 
 def test_placement_is_right_of_every_other_screen_in_logical_pixels():
@@ -78,7 +85,7 @@ def test_placement_is_right_of_every_other_screen_in_logical_pixels():
         _output(3, "Virtual-b"),
         _output(4, "DP-1", x=9999, enabled=False),
     ]
-    assert wayland.placement_for("Virtual-b", outputs) == (1920 + 1180, 0)
+    assert wayland.placement_for(3, outputs) == (1920 + 1180, 0)
 
 
 def test_mode_lookup_prefers_the_closest_refresh_rate():
@@ -254,3 +261,29 @@ def test_pointer_notifications_are_fire_and_forget():
     assert move.body == (session._session, {}, 42, 10.0, 20.5)
     assert press.body == (session._session, {}, portal.BTN_LEFT, 1)
     assert all(m.header.flags & MessageFlag.no_reply_expected for m in sent)
+
+
+def test_each_extra_client_gets_its_own_app_id_and_restore_tokens(tmp_path):
+    assert portal.slot_app_id(1) is None
+    assert portal.slot_app_id(2) == "viewdock-host-2"
+    with patch.dict(os.environ, {"XDG_STATE_HOME": str(tmp_path)}):
+        portal.save_restore_token("first", slot=1)
+        portal.save_restore_token("second", slot=2)
+        assert portal.load_restore_token(slot=1) == "first"
+        assert portal.load_restore_token(slot=2) == "second"
+        assert portal.restore_token_path(slot=1).name == "screencast-restore-token"
+
+
+def test_slots_are_reused_lowest_first():
+    servers = [wayland.KWinWaylandDisplayServer() for _ in range(3)]
+    with patch.object(wayland._PortalDisplayServer, "_slots_in_use", set()):
+        assert [s._take_slot() for s in servers] == [1, 2, 3]
+        servers[0]._free_slot()
+        assert wayland.KWinWaylandDisplayServer()._take_slot() == 1
+
+
+def test_desktop_entry_for_an_extra_slot_is_hidden(tmp_path):
+    with patch.dict(os.environ, {"XDG_DATA_HOME": str(tmp_path)}):
+        portal.ensure_desktop_entry("viewdock-host-2", 2)
+        text = portal.desktop_entry_path("viewdock-host-2").read_text()
+    assert "NoDisplay=true" in text
