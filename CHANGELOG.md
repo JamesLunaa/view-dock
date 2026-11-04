@@ -22,6 +22,8 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
   fresh `pip install -r host/requirements.txt` already gets the fixed version.
 
 ### Changed
+- `host/requirements.lock.txt`: numpy 2.5.3 → 2.5.4 (Python 3.12+ only; 3.11 keeps 2.4.6),
+  websockets 17.1 → 17.2, rpds-py 2026.6.3 → 2026.9.1, iniconfig 2.3.0 → 2.3.1 (tests only).
 - **The copyright holder is now written as Jose Cynon Luna** (previously James Luna; same
   person) in every file header, `NOTICE`, the README, both apps' About screens and the
   package metadata. The license (GPL-3.0-or-later) is unchanged.
