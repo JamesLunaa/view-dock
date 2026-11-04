@@ -1,6 +1,6 @@
 // swift-tools-version:6.0
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 James Luna
+// Copyright (C) 2026 Jose Cynon Luna
 
 //
 // Builds the iPad app with xtool (https://xtool.sh) on Linux, without a Mac:

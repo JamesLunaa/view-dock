@@ -9,6 +9,16 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
 
 ## [Unreleased]
 
+### Added
+- **`ipad/xtool/install.sh`** reinstalls the iPad app with xtool and retries once when the
+  first attempt fails with "There are no current IOS devices on this team" (a free Apple ID
+  hits this about once a week, while the iPad is registered again). Reported working.
+
+### Changed
+- **The copyright holder is now written as Jose Cynon Luna** (previously James Luna; same
+  person) in every file header, `NOTICE`, the README, both apps' About screens and the
+  package metadata. The license (GPL-3.0-or-later) is unchanged.
+
 ## [2.4.1](https://github.com/JamesLunaa/view-dock/compare/v2.0.1...v2.0.2) - 2026-10-27
 
 ### Fixed

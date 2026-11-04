@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Reads frames from a PipeWire screen-cast stream (what the ScreenCast portal
 hands over on Wayland) as BGRA numpy arrays.

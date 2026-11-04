@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 James Luna
+// Copyright (C) 2026 Jose Cynon Luna
 
 import Foundation
 
@@ -8,7 +8,7 @@ import Foundation
 /// `legal/components.json` by `scripts/generate_legal.py` — don't edit them by hand.
 enum AppInfo {
     static let name = "view-dock"
-    static let copyright = "Copyright (C) 2026 James Luna"
+    static let copyright = "Copyright (C) 2026 Jose Cynon Luna"
     static let sourceURL = URL(string: "https://github.com/JamesLunaa/view-dock")!
 
     /// The two notices the GPL requires an interactive program to show (GPL-3.0 §5(d)).

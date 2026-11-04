@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """WebRTC session: video track sourced from a DisplayServer capture, plus
 the `control` data channel carrying protocol/ messages. Reused unchanged

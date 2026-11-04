@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Derives every view-dock app icon from `branding/icon.svg`, so the host, the
 iPad app and the Android app can't drift apart.

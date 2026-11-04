@@ -29,7 +29,7 @@ apps speak the same protocol. The host can serve **several devices at once**
   <sub>Animated illustration of the workflow, not a screen recording.</sub>
 </p>
 
-Created by James Luna. Free software under the GPL-3.0-or-later — see
+Created by Jose Cynon Luna. Free software under the GPL-3.0-or-later — see
 [License](#license).
 
 ## Status
@@ -419,7 +419,7 @@ issue tracker. Notable changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-Copyright (C) 2026 **James Luna**. view-dock is free software, licensed under the
+Copyright (C) 2026 **Jose Cynon Luna**. view-dock is free software, licensed under the
 [GNU General Public License v3.0 or later](LICENSE) (GPL-3.0-or-later): you may use,
 study, share and modify it, but if you distribute it — or a modified version, including
 a built app — you must keep the copyright notice, give the recipients the source, and

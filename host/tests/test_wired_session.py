@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Covers the wired (USB) stream: the encoder emits a self-contained Annex-B
 stream a phone decoder can start from, and `WiredSession` puts the right

@@ -137,7 +137,7 @@ they get out of step.
 ## Licensing and credit
 
 view-dock is licensed under the **GPL-3.0-or-later** (see [LICENSE](LICENSE) and
-[NOTICE](NOTICE)); the copyright holder is James Luna.
+[NOTICE](NOTICE)); the copyright holder is Jose Cynon Luna.
 
 **Every source file starts with a two-line notice** (`SPDX-License-Identifier:
 GPL-3.0-or-later` and the copyright line). After adding a file, run

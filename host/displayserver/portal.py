@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Minimal client for the xdg-desktop-portal ScreenCast and RemoteDesktop
 interfaces, used by the Wayland display servers to have the compositor create

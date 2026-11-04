@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 James Luna
+// Copyright (C) 2026 Jose Cynon Luna
 
 package dev.viewdock.android.ui
 
@@ -9,7 +9,7 @@ package dev.viewdock.android.ui
  * `scripts/generate_legal.py` — don't edit them by hand.
  */
 object LegalInfo {
-    const val COPYRIGHT = "Copyright (C) 2026 James Luna"
+    const val COPYRIGHT = "Copyright (C) 2026 Jose Cynon Luna"
     const val SOURCE_URL = "https://github.com/JamesLunaa/view-dock"
     const val LICENSE_ASSET = "legal/gpl-3.0.txt"
     const val NOTICES_ASSET = "legal/notices.txt"

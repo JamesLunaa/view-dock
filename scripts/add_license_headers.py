@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Puts the license + copyright notice at the top of every source file.
 
@@ -18,7 +18,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 SPDX = "SPDX-License-Identifier: GPL-3.0-or-later"
-COPYRIGHT = "Copyright (C) 2026 James Luna"
+COPYRIGHT = "Copyright (C) 2026 Jose Cynon Luna"
 
 COMMENT_PREFIX = {".py": "#", ".sh": "#", ".kt": "//", ".kts": "//", ".swift": "//"}
 

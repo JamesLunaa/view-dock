@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Pure-math tests for X11DisplayServer._exact_width_modeline — the fix for
 `cvt -r`'s multiple-of-8 width rounding (1180 -> 1184) that otherwise left

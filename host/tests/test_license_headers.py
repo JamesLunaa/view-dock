@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Every source file carries the license + copyright notice, so the credit and the
 GPL terms travel with a file even if someone copies just part of the project.
@@ -31,8 +31,8 @@ def test_the_license_file_is_the_gpl_v3():
 
 
 def test_the_credit_is_in_the_notice_and_the_readme():
-    assert "Copyright (C) 2026 James Luna" in (ROOT / "NOTICE").read_text()
-    assert "James Luna" in (ROOT / "README.md").read_text()
+    assert "Copyright (C) 2026 Jose Cynon Luna" in (ROOT / "NOTICE").read_text()
+    assert "Jose Cynon Luna" in (ROOT / "README.md").read_text()
 
 
 def test_header_insertion_keeps_shebangs_and_the_swift_tools_line_first():

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """The release version must read the same everywhere: the latest dated section of
 CHANGELOG.md, the Android app's versionName/versionCode, the iPad project's

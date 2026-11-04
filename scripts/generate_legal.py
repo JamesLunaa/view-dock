@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Builds the legal text the Android and iPad apps show on their About / Licenses screens.
 
@@ -23,7 +23,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 LEGAL = ROOT / "legal"
 
-COPYRIGHT = "Copyright (C) 2026 James Luna"
+COPYRIGHT = "Copyright (C) 2026 Jose Cynon Luna"
 SOURCE_URL = "https://github.com/JamesLunaa/view-dock"
 
 OUTPUT_DIRS = {

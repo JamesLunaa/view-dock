@@ -57,6 +57,16 @@ The first launch asks you to trust the developer (Settings → General → VPN &
 Management). With a free Apple ID the app stops opening after 7 days; run `xtool dev` again
 to reinstall.
 
+The first `xtool dev` of the week often fails with "There are no current IOS devices on this
+team": that run registers the iPad with Apple again, and a second run installs. `install.sh`
+does the retry for you:
+
+```sh
+SWIFT_TOOLCHAIN=<path to the toolchain's usr/bin> ipad/xtool/install.sh
+```
+
+`SWIFT_TOOLCHAIN` is only needed if `swift` isn't already on your `PATH`.
+
 **Arch Linux:** Swift's Linux toolchain is built for Ubuntu and looks for `libxml2.so.2` and
 `libncurses.so.6`, which Arch names differently. Symlink them into the toolchain (paths
 relative to the toolchain's `usr/`):
@@ -140,7 +150,7 @@ Pencil-specific input (pressure/hover; only plain touch is forwarded today).
 ## About and Licenses
 
 The connect screen has an **info (ⓘ)** button (top right) that opens an About sheet: the
-app's version and copyright (James Luna), the GPL notices, the full GNU GPL v3 text, the
+app's version and copyright (Jose Cynon Luna), the GPL notices, the full GNU GPL v3 text, the
 licenses of the libraries inside the app, and a link to the source code
 (`Sources/Legal/`). The texts are bundled from `Resources/Legal/` — a folder reference in
 `project.yml` — and are **generated**: edit `legal/components.json` and run
