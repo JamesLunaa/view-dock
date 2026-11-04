@@ -14,7 +14,16 @@ tagged, newest first. `## [Unreleased]` collects changes made since the latest t
   first attempt fails with "There are no current IOS devices on this team" (a free Apple ID
   hits this about once a week, while the iPad is registered again). Reported working.
 
+### Security
+- **dnspython 2.8.0 → 2.9.2** in `host/requirements.lock.txt` (GHSA-45c3-73f7-pv4m /
+  CVE-2026-114605, high: a crafted DNS message makes dnspython use excessive CPU). It comes
+  in through `aioice` (WebRTC's connection setup), so a device on the same network could
+  slow the host down; nothing is leaked. `host/requirements.txt` doesn't pin it, so a
+  fresh `pip install -r host/requirements.txt` already gets the fixed version.
+
 ### Changed
+- `host/requirements.lock.txt`: numpy 2.5.3 → 2.5.4 (Python 3.12+ only; 3.11 keeps 2.4.6),
+  websockets 17.1 → 17.2, rpds-py 2026.6.3 → 2026.9.1, iniconfig 2.3.0 → 2.3.1 (tests only).
 - **The copyright holder is now written as Jose Cynon Luna** (previously James Luna; same
   person) in every file header, `NOTICE`, the README, both apps' About screens and the
   package metadata. The license (GPL-3.0-or-later) is unchanged.
