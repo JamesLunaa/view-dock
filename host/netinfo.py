@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """The host's own LAN addresses, for showing the user what to type into the
 app's "Connect over Wi-Fi" field."""

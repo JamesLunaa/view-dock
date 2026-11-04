@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 # Builds the iPad app with xtool and installs it on the plugged-in iPad.
 #

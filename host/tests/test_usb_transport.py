@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Covers a crash hit live: unplugging the iPad kills `iproxy` on its own
 (it exits once the USB device it's tunneling to disappears), and

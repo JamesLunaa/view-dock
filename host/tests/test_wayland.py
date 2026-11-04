@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """The KDE Wayland display server's pure logic: picking it for a Wayland
 session, finding the output the portal created, sizing and placing it with

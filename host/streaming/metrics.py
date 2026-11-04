@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Rolling pipeline timings, logged periodically so "it feels laggy" can be
 split into capture vs. encode vs. network instead of guessed at.

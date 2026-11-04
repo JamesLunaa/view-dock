@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 # Forces a real GPU display connector "connected" at the kernel/DRM level, so
 # a virtual display can be attached to it with nothing physically plugged in.

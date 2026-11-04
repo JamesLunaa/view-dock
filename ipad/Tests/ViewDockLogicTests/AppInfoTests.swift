@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 James Luna
+// Copyright (C) 2026 Jose Cynon Luna
 
 import XCTest
 @testable import ViewDockLogic
@@ -26,7 +26,7 @@ final class AppInfoTests: XCTestCase {
     }
 
     func testTheCreditAndSourceLink() {
-        XCTAssertEqual(AppInfo.copyright, "Copyright (C) 2026 James Luna")
+        XCTAssertEqual(AppInfo.copyright, "Copyright (C) 2026 Jose Cynon Luna")
         XCTAssertEqual(AppInfo.sourceURL.absoluteString, "https://github.com/JamesLunaa/view-dock")
     }
 

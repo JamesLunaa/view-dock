@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Wi-Fi discovery: advertise the host over mDNS / DNS-SD ("Bonjour") so the
 apps can list it instead of making the user type an IP address.

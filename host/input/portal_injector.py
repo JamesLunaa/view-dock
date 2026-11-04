@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """Injects `input_event` messages through the RemoteDesktop portal instead of
 uinput — the GNOME Wayland path, where a uinput touchscreen can't be pinned

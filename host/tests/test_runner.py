@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """HostRunner with several clients at once: each admitted client gets its own
 virtual display, injector and session; the host refuses clients past the cap;

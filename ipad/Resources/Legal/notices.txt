@@ -1,5 +1,5 @@
 view-dock
-Copyright (C) 2026 James Luna
+Copyright (C) 2026 Jose Cynon Luna
 
 view-dock is free software, licensed under the GNU General Public License,
 version 3 or (at your option) any later version.

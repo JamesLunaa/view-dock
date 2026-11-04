@@ -23,7 +23,7 @@ untested. Known limits:
 ## About and Licenses
 
 The connect screen has an **About** button (top right): the app's version and copyright
-(James Luna), the GPL notices, the full GNU GPL v3 text, the licenses of the libraries
+(Jose Cynon Luna), the GPL notices, the full GNU GPL v3 text, the licenses of the libraries
 inside the app, and a link to the source code. The texts are bundled in
 `app/src/main/assets/legal/` and are **generated** — edit `legal/components.json` and run
 `python scripts/generate_legal.py`, don't change them by hand. (Checked on a vivo Y28: the

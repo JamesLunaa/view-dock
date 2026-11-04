@@ -150,7 +150,7 @@ Pencil-specific input (pressure/hover; only plain touch is forwarded today).
 ## About and Licenses
 
 The connect screen has an **info (ⓘ)** button (top right) that opens an About sheet: the
-app's version and copyright (James Luna), the GPL notices, the full GNU GPL v3 text, the
+app's version and copyright (Jose Cynon Luna), the GPL notices, the full GNU GPL v3 text, the
 licenses of the libraries inside the app, and a link to the source code
 (`Sources/Legal/`). The texts are bundled from `Resources/Legal/` — a folder reference in
 `project.yml` — and are **generated**: edit `legal/components.json` and run

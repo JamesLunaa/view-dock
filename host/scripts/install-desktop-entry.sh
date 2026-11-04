@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 # Installs an application-menu launcher for the host GUI — "an app icon
 # where we can launch this without doing the CLI stuff". Templates

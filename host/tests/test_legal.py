@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 James Luna
+# Copyright (C) 2026 Jose Cynon Luna
 
 """The apps' About / Licenses screens show text generated from LICENSE and
 legal/components.json. These checks keep the bundled copies in step with their sources
@@ -46,7 +46,7 @@ def test_each_apps_notices_list_only_its_own_libraries():
     assert "Java-WebSocket" in android and "Java-WebSocket" not in ipad
     assert "stasel/WebRTC" in ipad and "stasel/WebRTC" not in android
     for notices in (android, ipad):
-        assert "ABSOLUTELY NO WARRANTY" in notices and "Copyright (C) 2026 James Luna" in notices
+        assert "ABSOLUTELY NO WARRANTY" in notices and "Copyright (C) 2026 Jose Cynon Luna" in notices
 
 
 def test_mit_and_bsd_licenses_keep_their_copyright_lines():
