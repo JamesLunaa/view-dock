@@ -57,6 +57,16 @@ The first launch asks you to trust the developer (Settings → General → VPN &
 Management). With a free Apple ID the app stops opening after 7 days; run `xtool dev` again
 to reinstall.
 
+The first `xtool dev` of the week often fails with "There are no current IOS devices on this
+team": that run registers the iPad with Apple again, and a second run installs. `install.sh`
+does the retry for you:
+
+```sh
+SWIFT_TOOLCHAIN=<path to the toolchain's usr/bin> ipad/xtool/install.sh
+```
+
+`SWIFT_TOOLCHAIN` is only needed if `swift` isn't already on your `PATH`.
+
 **Arch Linux:** Swift's Linux toolchain is built for Ubuntu and looks for `libxml2.so.2` and
 `libncurses.so.6`, which Arch names differently. Symlink them into the toolchain (paths
 relative to the toolchain's `usr/`):
