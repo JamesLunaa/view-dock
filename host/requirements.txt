@@ -7,7 +7,7 @@ websockets>=13.0
 
 # Wi-Fi discovery: advertises the host over mDNS (optional at runtime — if it
 # fails, clients just type the IP; see host/transport/discovery.py)
-zeroconf>=0.130
+zeroconf>=0.153.0
 
 # protocol/schema/*.json validation (see protocol/validation.py)
 jsonschema>=4.0
