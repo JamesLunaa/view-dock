@@ -16,9 +16,9 @@
 #         --generate-hashes --universal --python-version 3.11
 #
 # then restore this header, which uv's own two-line header replaces.
-aioice==0.10.2 \
-    --hash=sha256:14911c15ab12d096dd14d372ebb4aecbb7420b52c9b76fdfcf54375dec17fcbf \
-    --hash=sha256:bf236c6829ee33c8e540535d31cd5a066b531cb56de2be94c46be76d68b1a806
+aioice==0.11.0 \
+    --hash=sha256:03e30294e208462bd420c271e5b93457e36bf3199009050640fa5ebf7c844592 \
+    --hash=sha256:71cc1b1104b88d7ca3c63a64d7d7fb9e4a8d9411c3da64814b43645d6a7990e1
     # via aiortc
 aiortc==1.15.0 \
     --hash=sha256:4e1e54bff31a9c2cb654c7b7edc068085a7df53365e5df24a5cb24168e3f95f7 \
